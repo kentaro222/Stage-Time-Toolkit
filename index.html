@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bar Timer (カスタム時計版)</title>
+    <title>Bar Timer (カスタム時計・修正版)</title>
     
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <link rel="stylesheet" type="text/css" href="https://npmcdn.com/flatpickr/dist/themes/dark.css">
@@ -41,7 +41,6 @@
         
         .time-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; width: 100%; }
         
-        /* 入力欄のデザイン（標準の時計アイコンを消すために type="text" に変更します） */
         input[type="text"].target-time { 
             flex: 1; padding: 12px; border-radius: 5px; border: none; font-size: 18px; 
             background: #333; color: white; text-align: center; cursor: pointer; width: 100%; 
@@ -57,8 +56,7 @@
         
         .active-row input { color: var(--bar-color); font-weight: bold; }
         
-        /* 入力中は削除ボタンを隠す */
-        .time-row:focus-within .btn-del { display: none; }
+        /* ※ここにあった「削除ボタンを隠すCSS」を丸ごと削除しました！ */
     </style>
 </head>
 <body>
@@ -112,34 +110,45 @@
         function addInput(value) {
             const div = document.createElement('div');
             div.className = 'time-row';
-            // type="text" に変更し、readonly属性を追加してスマホ標準キーボードが出ないようにする
             div.innerHTML = `<input type="text" class="target-time" value="${value}" readonly placeholder="--:--"> <button class="btn-del" onclick="removeInput(this)">×</button>`;
             container.appendChild(div);
             
             const input = div.querySelector('input');
 
-            // 🌟 Flatpickrの設定（スマホ標準の時計を無効化し、カスタムUIを強制）
             flatpickr(input, {
-                enableTime: true,        // 時間選択モード
-                noCalendar: true,        // カレンダーは非表示
-                dateFormat: "H:i",       // 24時間表記
-                time_24hr: true,         // AM/PMを使わない
-                disableMobile: true,     // ★ここが超重要！スマホ標準のバグる時計をブロック★
+                enableTime: true,
+                noCalendar: true,
+                dateFormat: "H:i",
+                time_24hr: true,
+                disableMobile: true, 
                 onChange: function(selectedDates, dateStr, instance) {
-                    saveData();          // 時間が変更されたら保存
+                    saveData();
                 }
             });
             
             saveData();
         }
 
+        // 🌟 削除ボタンの処理を少し改良（時計の裏側データも一緒に消すようにしました）
         function removeInput(btn) {
-            btn.parentElement.remove();
+            const row = btn.parentElement;
+            const input = row.querySelector('.target-time');
+            
+            // 時計UI（Flatpickr）のデータが残らないように完全に破壊する
+            if (input._flatpickr) {
+                input._flatpickr.destroy();
+            }
+            
+            row.remove();
             saveData();
         }
 
         function clearAll() {
             if(confirm("設定した時刻をすべて消去しますか？")) {
+                // Flatpickrのインスタンスをすべて破壊してから中身を消す
+                document.querySelectorAll('.target-time').forEach(input => {
+                    if (input._flatpickr) input._flatpickr.destroy();
+                });
                 container.innerHTML = '';
                 addInput('');
                 saveData();
@@ -168,7 +177,6 @@
             if (container.children.length === 0) addInput('');
             
             const firstInput = document.querySelector('.target-time');
-            // Flatpickrに値をセット
             firstInput._flatpickr.setDate(`${hh}:${mm}`);
             saveData();
 
@@ -277,225 +285,6 @@
                 bar.style.width = '0%';
                 countdown.textContent = "00:00";
                 
-                if (lastNotifiedIndex !== 'finished') {
-                    sendNotification("終了しました", "すべての予定スケジュールが完了しました。");
-                    lastNotifiedIndex = 'finished';
-                }
-
-                isRunning = false;
-                toggleTimer();
-            }
-        }
-
-        loadData();
-        setInterval(updateTime, 1000);
-    </script>
-</body>
-</html>
-    </style>
-</head>
-<body>
-
-    <div class="header" id="currentTime">現在時刻: --:--:--</div>
-    
-    <div class="countdown" id="countdown">00:00</div>
-    <div class="status" id="status">設定してください</div>
-
-    <div class="progress-container">
-        <div id="progress-bar"></div>
-    </div>
-
-    <div class="settings">
-        <div class="controls-top">
-            <button class="btn-action" onclick="startWithCurrentTime()">現在時刻でスタート</button>
-            <button class="btn-clear" onclick="clearAll()">すべて消去</button>
-        </div>
-
-        <div id="timeInputs"></div>
-        
-        <button class="btn-add" onclick="addInput('')">＋時刻を追加</button>
-        <button class="start-btn" onclick="toggleTimer()" id="mainBtn">タイマースタート</button>
-    </div>
-
-    <script>
-        const container = document.getElementById('timeInputs');
-        let isRunning = false;
-        let lastNotifiedIndex = null; // 通知の重複を防ぐための変数
-
-        // --- データ保存・読み込み ---
-        function saveData() {
-            const inputs = Array.from(document.querySelectorAll('.target-time')).map(input => input.value);
-            localStorage.setItem('barTimerSchedule', JSON.stringify(inputs));
-        }
-
-        function loadData() {
-            const saved = localStorage.getItem('barTimerSchedule');
-            container.innerHTML = '';
-            if (saved) {
-                const times = JSON.parse(saved);
-                if(times.length > 0) {
-                    times.forEach(t => addInput(t));
-                    return;
-                }
-            }
-            addInput('23:00');
-            addInput('01:00');
-        }
-
-        function addInput(value) {
-            const div = document.createElement('div');
-            div.className = 'time-row';
-            div.innerHTML = `<input type="time" class="target-time" value="${value}"> <button class="btn-del" onclick="removeInput(this)">×</button>`;
-            container.appendChild(div);
-            div.querySelector('input').addEventListener('change', saveData);
-            saveData();
-        }
-
-        function removeInput(btn) {
-            btn.parentElement.remove();
-            saveData();
-        }
-
-        function clearAll() {
-            if(confirm("設定した時刻をすべて消去しますか？")) {
-                container.innerHTML = '';
-                addInput('');
-                saveData();
-            }
-        }
-
-        // --- 通知機能 ---
-        function requestNotificationPermission() {
-            if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
-                Notification.requestPermission();
-            }
-        }
-
-        function sendNotification(title, body) {
-            if ("Notification" in window && Notification.permission === "granted") {
-                new Notification(title, { body: body });
-            }
-        }
-
-        // --- タイマー操作 ---
-        function startWithCurrentTime() {
-            const now = new Date();
-            const hh = String(now.getHours()).padStart(2, '0');
-            const mm = String(now.getMinutes()).padStart(2, '0');
-            
-            if (container.children.length === 0) addInput('');
-            
-            const firstInput = document.querySelector('.target-time');
-            firstInput.value = `${hh}:${mm}`;
-            saveData();
-
-            if (!isRunning) toggleTimer();
-        }
-
-        function toggleTimer() {
-            requestNotificationPermission(); // スタート時にブラウザへ通知許可を要求
-            
-            isRunning = !isRunning;
-            const btn = document.getElementById('mainBtn');
-            btn.textContent = isRunning ? "ストップ" : "タイマースタート";
-            btn.style.background = isRunning ? "#e67e22" : "#27ae60";
-            
-            if (isRunning) {
-                lastNotifiedIndex = null; // スタート時に通知状態をリセット
-            }
-        }
-
-        // --- メインロジック ---
-        function updateTime() {
-            const now = new Date();
-            document.getElementById('currentTime').textContent = `現在時刻: ${now.toLocaleTimeString()}`;
-            
-            if (!isRunning) return;
-
-            const inputsList = Array.from(document.querySelectorAll('.target-time'))
-                .filter(input => input.value !== "");
-
-            if (inputsList.length < 2) {
-                document.getElementById('status').textContent = "開始・終了の2つ以上の時刻が必要です";
-                return;
-            }
-
-            function buildSchedule(baseDate) {
-                let dayOffset = 0;
-                let prevMinutes = -1;
-                
-                return inputsList.map(input => {
-                    const [h, m] = input.value.split(':').map(Number);
-                    const mins = h * 60 + m;
-                    if (prevMinutes !== -1 && mins < prevMinutes) dayOffset++;
-                    prevMinutes = mins;
-                    
-                    const d = new Date(baseDate);
-                    d.setDate(d.getDate() + dayOffset);
-                    d.setHours(h, m, 0, 0);
-                    return { time: d, element: input.parentElement, value: input.value };
-                });
-            }
-
-            const today = new Date(now);
-            today.setHours(0, 0, 0, 0);
-            const yesterday = new Date(today);
-            yesterday.setDate(yesterday.getDate() - 1);
-
-            let schedule = buildSchedule(today);
-            const scheduleYesterday = buildSchedule(yesterday);
-            const nowTime = now.getTime();
-
-            const yStart = scheduleYesterday[0].time.getTime();
-            const yEnd = scheduleYesterday[scheduleYesterday.length - 1].time.getTime();
-            if (nowTime >= yStart && nowTime < yEnd) {
-                schedule = scheduleYesterday;
-            }
-
-            let currentIndex = -1;
-            for (let i = 0; i < schedule.length - 1; i++) {
-                if (nowTime >= schedule[i].time.getTime() && nowTime < schedule[i+1].time.getTime()) {
-                    currentIndex = i;
-                    break;
-                }
-            }
-
-            const bar = document.getElementById('progress-bar');
-            const status = document.getElementById('status');
-            const countdown = document.getElementById('countdown');
-
-            inputsList.forEach(input => input.parentElement.classList.remove('active-row'));
-
-            if (currentIndex !== -1) {
-                const start = schedule[currentIndex].time.getTime();
-                const end = schedule[currentIndex+1].time.getTime();
-                const remainingMs = end - nowTime;
-                const progress = (remainingMs / (end - start)) * 100;
-
-                bar.style.width = progress + '%';
-                status.textContent = `${schedule[currentIndex].value} 〜 ${schedule[currentIndex+1].value}`;
-                schedule[currentIndex].element.classList.add('active-row');
-
-                const m = Math.floor(remainingMs / 60000).toString().padStart(2, '0');
-                const s = Math.floor((remainingMs % 60000) / 1000).toString().padStart(2, '0');
-                countdown.textContent = `${m}:${s}`;
-
-                // --- 区間の切り替わり通知処理 ---
-                if (lastNotifiedIndex !== null && lastNotifiedIndex !== currentIndex) {
-                    sendNotification("次の予定です", `${schedule[currentIndex].value} 〜 ${schedule[currentIndex+1].value} が始まりました。`);
-                }
-                lastNotifiedIndex = currentIndex;
-
-            } else if (nowTime < schedule[0].time.getTime()) {
-                status.textContent = "開始時刻を待っています...";
-                bar.style.width = '100%';
-                countdown.textContent = "--:--";
-            } else {
-                status.textContent = "すべての予定が終了しました";
-                bar.style.width = '0%';
-                countdown.textContent = "00:00";
-                
-                // --- 終了時の通知処理 ---
                 if (lastNotifiedIndex !== 'finished') {
                     sendNotification("終了しました", "すべての予定スケジュールが完了しました。");
                     lastNotifiedIndex = 'finished';
