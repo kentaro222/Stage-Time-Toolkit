@@ -50,11 +50,18 @@
         
         button { padding: 12px 15px; cursor: pointer; border: none; border-radius: 5px; font-weight: bold; transition: 0.2s; font-size: 16px; }
         button:hover { opacity: 0.8; }
-        .btn-add { background: #555; color: white; width: 100%; margin-bottom: 15px; }
+        
         .btn-del { background: #c0392b; color: white; padding: 12px; flex-shrink: 0; }
         .btn-action { background: #3498db; color: white; flex: 1; }
         .btn-clear { background: #7f8c8d; color: white; }
-        .start-btn { background: #27ae60; width: 100%; font-size: 1.5rem; padding: 15px; color: white; }
+        .start-btn { background: #27ae60; width: 100%; font-size: 1.5rem; padding: 15px; color: white; margin-top: 5px;}
+        
+        /* 追加ボタンエリアのデザイン */
+        .add-controls { display: flex; gap: 10px; margin-bottom: 15px; width: 100%; }
+        .btn-add { background: #555; color: white; flex: 1; margin: 0; }
+        .rel-time-wrapper { display: flex; gap: 5px; flex: 1.5; }
+        .rel-time-input { width: 70px; padding: 12px; border-radius: 5px; border: none; font-size: 16px; background: #333; color: white; text-align: center; }
+        .btn-rel { background: #9b59b6; color: white; flex: 1; margin: 0; }
         
         .active-row input { color: var(--bar-color); font-weight: bold; }
     </style>
@@ -78,7 +85,14 @@
 
         <div id="timeInputs"></div>
         
-        <button class="btn-add" onclick="addInput('')">＋時刻を追加</button>
+        <div class="add-controls">
+            <button class="btn-add" onclick="addInput('')">＋空欄</button>
+            <div class="rel-time-wrapper">
+                <input type="number" id="relMins" class="rel-time-input" value="15" min="1">
+                <button class="btn-rel" onclick="addRelativeTime()">分後を追加</button>
+            </div>
+        </div>
+        
         <button class="start-btn" onclick="toggleTimer()" id="mainBtn">スタート</button>
     </div>
 
@@ -147,6 +161,51 @@
                 addInput('');
                 saveData();
             }
+        }
+
+        // 🌟 「〇〇分後を追加」するメイン機能
+        function addRelativeTime() {
+            const min = parseInt(document.getElementById('relMins').value) || 0;
+            if (min <= 0) return;
+
+            const inputs = Array.from(document.querySelectorAll('.target-time'));
+            let baseDate = new Date();
+
+            // 一番最後に入力されている時間を探す
+            const lastFilled = [...inputs].reverse().find(input => input.value !== "");
+            
+            if (lastFilled) {
+                const [h, m] = lastFilled.value.split(':').map(Number);
+                baseDate.setHours(h, m, 0, 0);
+            } else {
+                // まだ一つも時間が入力されていなければ、「現在の時刻」を最初の空欄にセットする
+                const nowH = String(baseDate.getHours()).padStart(2, '0');
+                const nowM = String(baseDate.getMinutes()).padStart(2, '0');
+                const firstEmpty = inputs.find(i => i.value === "");
+                if (firstEmpty) {
+                    firstEmpty._flatpickr.setDate(`${nowH}:${nowM}`);
+                } else {
+                    addInput(`${nowH}:${nowM}`);
+                }
+            }
+
+            // 指定された「分」を足す
+            baseDate.setMinutes(baseDate.getMinutes() + min);
+            const newH = String(baseDate.getHours()).padStart(2, '0');
+            const newM = String(baseDate.getMinutes()).padStart(2, '0');
+            const targetTime = `${newH}:${newM}`;
+
+            // 計算した「〇〇分後」を空欄に入れるか、新しい行を追加する
+            const updatedInputs = Array.from(document.querySelectorAll('.target-time'));
+            const emptyInput = updatedInputs.find(i => i.value === "");
+            
+            if (emptyInput) {
+                emptyInput._flatpickr.setDate(targetTime);
+            } else {
+                addInput(targetTime);
+            }
+            
+            saveData();
         }
 
         function requestNotificationPermission() {
