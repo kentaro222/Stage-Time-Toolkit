@@ -1,4 +1,5 @@
-"name": "Stage Time Toolkit",
+{
+  "name": "Stage Time Toolkit",
   "short_name": "StageTime",
   "start_url": "index.html",
   "display": "standalone",
@@ -16,4 +17,4 @@
       "type": "image/png"
     }
   ]
-}_
+}
