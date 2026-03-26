@@ -1,56 +1,47 @@
-const CACHE_NAME = 'stage-time-toolkit-v2'; // バージョンを上げると更新が反映されます
+const CACHE_NAME = 'stage-time-toolkit-v3'; // バージョンを上げると更新が反映されます
+
 const urlsToCache = [
   './',
   'index.html',
-  'manifest.json', // ← これもキャッシュに必須です
+  'manifest.json',
+  'STT-icon-192.png',
+  'STT-icon-512.png',
   'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css',
   'https://npmcdn.com/flatpickr/dist/themes/dark.css',
-  'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.js' // ← 末尾を明確に指定
+  'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.js' // .jsまで正確に
 ];
 
-// インストール
+// インストール：ここが失敗すると404の原因になる
 self.addEventListener('install', (event) => {
-  // skipWaitingをいれることで、新しいSWを即座に有効化させます
-  self.skipWaiting();
+  self.skipWaiting(); // 新しいSWを強制的に有効化
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('Opened cache');
-      return cache.addAll(urlsToCache);
+      // 一気にaddAllせず、失敗してもログが出るようにする工夫
+      return Promise.all(
+        urlsToCache.map(url => {
+          return cache.add(url).catch(err => console.error('キャッシュ失敗:', url, err));
+        })
+      );
     })
   );
 });
 
-// アクティベート（古いキャッシュの削除）
+// アクティベート：古いキャッシュを掃除
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    (async () => {
-      const cacheNames = await caches.keys();
-      await Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-      // クライアントを制御下に置く
-      return self.clients.claim();
-    })()
+    caches.keys().then((keys) => {
+      return Promise.all(keys.map((key) => {
+        if (key !== CACHE_NAME) return caches.delete(key);
+      }));
+    })
   );
 });
 
-// フェッチ（オフライン対応の要）
+// フェッチ：オフライン時はキャッシュを返す
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request).then((response) => {
-      // キャッシュがあれば返す
-      if (response) {
-        return response;
-      }
-      // なければネットワークから取得を試みる
-      return fetch(event.request).catch(() => {
-        // ネットワークもダメ（オフライン）で、HTMLリクエストならTOPを返すなどの処理も可能
-      });
+      return response || fetch(event.request);
     })
   );
 });
