@@ -1,4 +1,4 @@
-const CACHE_NAME = 'stage-time-toolkit-v3'; // バージョンを上げると更新が反映されます
+const CACHE_NAME = 'stage-time-toolkit-v4'; // バージョンを上げると更新が反映されます
 
 const urlsToCache = [
   './',
@@ -6,9 +6,9 @@ const urlsToCache = [
   'manifest.json',
   'STT-icon-192.png',
   'STT-icon-512.png',
-  'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css',
-  'https://npmcdn.com/flatpickr/dist/themes/dark.css',
-  'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.js' // .jsまで正確に
+  './flatpickr.min.css',
+  './dark.css',
+  './flatpickr.min.js',
 ];
 
 // インストール：ここが失敗すると404の原因になる
