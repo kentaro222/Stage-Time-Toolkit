@@ -145,11 +145,12 @@
     .bt-btn-action { background: #3498db; color: white; flex: 1; }
     .bt-btn-add-top { background: #8e44ad; color: white; flex: 1; }
     .bt-btn-clear { background: #7f8c8d; color: white; }
-    .bt-start-btn { background: #27ae60; width: 100%; font-size: 1.5rem; padding: 15px; color: white; margin-top: 5px;}
+    
+    /* ★変更：スタートボタンの配置用スタイル（下マージンに変更） */
+    .bt-start-btn { background: #27ae60; width: 100%; font-size: 1.5rem; padding: 15px; color: white; margin-bottom: 15px;}
     
     .bt-add-controls { display: flex; gap: 10px; margin-bottom: 15px; width: 100%; }
-    .bt-btn-add { background: #555; color: white; flex: 1; margin: 0; }
-    .bt-rel-time-wrapper { display: flex; gap: 5px; flex: 1.5; }
+    .bt-rel-time-wrapper { display: flex; gap: 5px; width: 100%; }
     .bt-rel-time-input { width: 70px; padding: 12px; border-radius: 5px; border: none; font-size: 16px; background: #333; color: white; text-align: center; }
     .bt-btn-rel { background: #9b59b6; color: white; flex: 1; margin: 0; }
     
@@ -226,6 +227,8 @@
         </div>
 
         <div class="bt-settings">
+            <button class="bt-start-btn" id="bt-mainBtn">スタート</button>
+
             <div class="bt-controls-top">
                 <button class="bt-btn-action" id="bt-btn-start-now">現在で開始</button>
                 <button class="bt-btn-add-top" id="bt-btn-add-top">先頭に追加</button>
@@ -235,14 +238,11 @@
             <div id="bt-timeInputs"></div>
             
             <div class="bt-add-controls">
-                <button class="bt-btn-add" id="bt-btn-add-empty">＋空欄</button>
                 <div class="bt-rel-time-wrapper">
                     <input type="number" id="bt-relMins" class="bt-rel-time-input" value="15" min="1">
                     <button class="bt-btn-rel" id="bt-btn-add-rel">分後を追加</button>
                 </div>
             </div>
-            
-            <button class="bt-start-btn" id="bt-mainBtn">スタート</button>
         </div>
     </div>
 
@@ -453,7 +453,6 @@ tabBtns.forEach(btn => {
         btnStartNow: document.getElementById('bt-btn-start-now'),
         btnClearAll: document.getElementById('bt-btn-clear-all'),
         btnAddTop: document.getElementById('bt-btn-add-top'),
-        btnAddEmpty: document.getElementById('bt-btn-add-empty'),
         btnAddRel: document.getElementById('bt-btn-add-rel'),
         relMinsInput: document.getElementById('bt-relMins')
     };
@@ -499,7 +498,6 @@ tabBtns.forEach(btn => {
     function addInput(value, position = 'bottom', refElement = null) {
         const div = document.createElement('div');
         div.className = 'bt-time-row';
-        // ★ readonlyを削除して手入力可能に
         div.innerHTML = `
             <input type="text" class="target-time" value="${value}" placeholder="--:--">
             <button class="bt-btn-insert" title="この下に追加">＋</button>
@@ -520,9 +518,8 @@ tabBtns.forEach(btn => {
             addInput('', 'after', div);
         });
 
-        // ★ 4桁数字での自動フォーマット機能
         input.addEventListener('blur', function() {
-            let val = this.value.replace(/[^\d]/g, ''); // 数字以外を除去
+            let val = this.value.replace(/[^\d]/g, '');
             if (val.length > 0) {
                 let h = "00", m = "00";
                 if (val.length === 1) { h = "0" + val; }
@@ -530,7 +527,6 @@ tabBtns.forEach(btn => {
                 else if (val.length === 3) { h = "0" + val.slice(0, 1); m = val.slice(1, 3); }
                 else if (val.length >= 4) { h = val.slice(0, 2); m = val.slice(2, 4); }
                 
-                // 上限の調整（24時間を超える場合は23時に、60分を超える場合は59分にする）
                 let hh = Math.min(23, parseInt(h));
                 let mm = Math.min(59, parseInt(m));
                 
@@ -543,7 +539,6 @@ tabBtns.forEach(btn => {
             }
         });
 
-        // Enterキーで確定させる
         input.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
                 this.blur();
@@ -564,7 +559,7 @@ tabBtns.forEach(btn => {
             dateFormat: "H:i",
             time_24hr: true,
             disableMobile: true,
-            allowInput: true, // ★手入力を許可
+            allowInput: true,
             onChange: function() { saveData(); }
         });
         
@@ -576,9 +571,12 @@ tabBtns.forEach(btn => {
         els.container.innerHTML = '';
         if (saved) {
             const times = JSON.parse(saved);
-            if (times.length > 0) return times.forEach(t => addInput(t));
+            if (times.length > 0) {
+                times.forEach(t => addInput(t));
+                return;
+            }
         }
-        addInput('23:00'); addInput('01:00');
+        addInput('');
     }
 
     // --- 各種ボタンイベント ---
@@ -588,12 +586,11 @@ tabBtns.forEach(btn => {
                 if (input._flatpickr) input._flatpickr.destroy();
             });
             els.container.innerHTML = ''; 
-            addInput(''); 
+            addInput(''); // 消去後も空欄を1つ出す
             saveData();
         }
     });
 
-    els.btnAddEmpty.addEventListener('click', () => addInput(''));
     els.btnAddTop.addEventListener('click', () => addInput('', 'top'));
 
     els.btnAddRel.addEventListener('click', () => {
@@ -638,12 +635,10 @@ tabBtns.forEach(btn => {
 
     els.btnStartNow.addEventListener('click', () => {
         const now = new Date();
-        if (els.container.children.length === 0) addInput('');
-        
-        const firstInput = els.container.querySelector('.target-time');
         const hh = String(now.getHours()).padStart(2, '0');
         const mm = String(now.getMinutes()).padStart(2, '0');
-        firstInput._flatpickr.setDate(`${hh}:${mm}`);
+        
+        addInput(`${hh}:${mm}`, 'top');
         
         saveData();
         if (!isRunning) setTimerState(true);
