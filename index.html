@@ -144,6 +144,7 @@
     .bt-btn-del { background: #c0392b; color: white; padding: 12px; flex-shrink: 0; }
     .bt-btn-insert { background: #2980b9; color: white; padding: 12px; flex-shrink: 0; } /* 挿入ボタン用に追加 */
     .bt-btn-action { background: #3498db; color: white; flex: 1; }
+    .bt-btn-add-top { background: #8e44ad; color: white; flex: 1; } /* 先頭に追加ボタン用 */
     .bt-btn-clear { background: #7f8c8d; color: white; }
     .bt-start-btn { background: #27ae60; width: 100%; font-size: 1.5rem; padding: 15px; color: white; margin-top: 5px;}
     
@@ -170,6 +171,7 @@
         #sw-time-display, .bt-countdown { font-size: 3.5rem; }
         .sw-lap-item { grid-template-columns: 40px 80px 80px 1fr; font-size: 0.9rem; }
         .tab-btn { font-size: 0.9rem; padding: 10px; }
+        .bt-controls-top { font-size: 0.85rem; }
     }
 </style>
 </head>
@@ -229,6 +231,7 @@
         <div class="bt-settings">
             <div class="bt-controls-top">
                 <button class="bt-btn-action" id="bt-btn-start-now">現在で開始</button>
+                <button class="bt-btn-add-top" id="bt-btn-add-top">先頭に追加</button>
                 <button class="bt-btn-clear" id="bt-btn-clear-all">消去</button>
             </div>
 
@@ -454,6 +457,7 @@ tabBtns.forEach(btn => {
         mainBtn: document.getElementById('bt-mainBtn'),
         btnStartNow: document.getElementById('bt-btn-start-now'),
         btnClearAll: document.getElementById('bt-btn-clear-all'),
+        btnAddTop: document.getElementById('bt-btn-add-top'), // ★追加
         btnAddEmpty: document.getElementById('bt-btn-add-empty'),
         btnAddRel: document.getElementById('bt-btn-add-rel'),
         relMinsInput: document.getElementById('bt-relMins')
@@ -497,8 +501,8 @@ tabBtns.forEach(btn => {
         localStorage.setItem('barTimerSchedule', JSON.stringify(inputs));
     }
 
-    // 復元：flatpickrを初期化してインプットを追加（途中挿入対応）
-    function addInput(value, insertAfterElement = null) {
+    // ★変更：position ('bottom', 'after', 'top') を受け取れるように拡張
+    function addInput(value, position = 'bottom', refElement = null) {
         const div = document.createElement('div');
         div.className = 'bt-time-row';
         div.innerHTML = `
@@ -517,15 +521,18 @@ tabBtns.forEach(btn => {
             saveData(); 
         });
 
+        // ＋ボタン（途中挿入）の処理
         btnInsert.addEventListener('click', () => {
-            addInput('', div);
+            addInput('', 'after', div);
         });
 
-        if (insertAfterElement && insertAfterElement.nextSibling) {
-            els.container.insertBefore(div, insertAfterElement.nextSibling);
-        } else if (insertAfterElement) {
-            els.container.appendChild(div);
+        // 挿入場所の判定
+        if (position === 'top') {
+            els.container.insertBefore(div, els.container.firstChild);
+        } else if (position === 'after' && refElement && refElement.nextSibling) {
+            els.container.insertBefore(div, refElement.nextSibling);
         } else {
+            // 末尾に追加（'bottom'、もしくは対象の次要素がない場合）
             els.container.appendChild(div);
         }
 
@@ -564,6 +571,9 @@ tabBtns.forEach(btn => {
     });
 
     els.btnAddEmpty.addEventListener('click', () => addInput(''));
+    
+    // ★追加：先頭に追加ボタン
+    els.btnAddTop.addEventListener('click', () => addInput('', 'top'));
 
     // 復元：相対時間（〇〇分後）の追加ロジック
     els.btnAddRel.addEventListener('click', () => {
