@@ -132,39 +132,36 @@
     
     .bt-time-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; width: 100%; }
     
-    /* 復元：flatpickr用テキストインプット */
     .bt-time-row input[type="text"].target-time { 
         flex: 1; padding: 12px; border-radius: 5px; border: none; font-size: 18px; 
-        background: #333; color: white; text-align: center; cursor: pointer; width: 100%; 
+        background: #333; color: white; text-align: center; cursor: text; width: 100%; 
     }
     
     .bt-settings button { padding: 12px 15px; cursor: pointer; border: none; border-radius: 5px; font-weight: bold; transition: 0.2s; font-size: 16px; }
     .bt-settings button:hover { opacity: 0.8; }
     
     .bt-btn-del { background: #c0392b; color: white; padding: 12px; flex-shrink: 0; }
-    .bt-btn-insert { background: #2980b9; color: white; padding: 12px; flex-shrink: 0; } /* 挿入ボタン用に追加 */
+    .bt-btn-insert { background: #2980b9; color: white; padding: 12px; flex-shrink: 0; }
     .bt-btn-action { background: #3498db; color: white; flex: 1; }
-    .bt-btn-add-top { background: #8e44ad; color: white; flex: 1; } /* 先頭に追加ボタン用 */
+    .bt-btn-add-top { background: #8e44ad; color: white; flex: 1; }
     .bt-btn-clear { background: #7f8c8d; color: white; }
     .bt-start-btn { background: #27ae60; width: 100%; font-size: 1.5rem; padding: 15px; color: white; margin-top: 5px;}
     
-    /* 復元：追加コントロールエリア */
     .bt-add-controls { display: flex; gap: 10px; margin-bottom: 15px; width: 100%; }
     .bt-btn-add { background: #555; color: white; flex: 1; margin: 0; }
     .bt-rel-time-wrapper { display: flex; gap: 5px; flex: 1.5; }
     .bt-rel-time-input { width: 70px; padding: 12px; border-radius: 5px; border: none; font-size: 16px; background: #333; color: white; text-align: center; }
     .bt-btn-rel { background: #9b59b6; color: white; flex: 1; margin: 0; }
     
-    /* ★変更：現在進行中のパネルを強調表示するスタイル */
     .bt-active-row { 
-        background: rgba(231, 76, 60, 0.2); /* 全体を赤く光らせる */
-        box-shadow: inset 0 0 0 1px var(--bt-accent); /* 赤い枠線 */
+        background: rgba(231, 76, 60, 0.2); 
+        box-shadow: inset 0 0 0 1px var(--bt-accent); 
         border-radius: 5px;
     }
     .bt-active-row input[type="text"].target-time { 
         color: var(--bt-accent); 
         font-weight: bold; 
-        background: transparent; /* 背景を透過して行のハイライトを目立たせる */
+        background: transparent; 
     }
 
     @media (max-width: 600px) {
@@ -294,7 +291,7 @@ tabBtns.forEach(btn => {
         btnStart: document.getElementById('sw-btn-start'), baseTimeInput: document.getElementById('sw-base-time-input'),
         btnWakeLock: document.getElementById('sw-btn-wakelock'), wakeLockDot: document.getElementById('sw-wake-lock-dot'),
         btnLap: document.getElementById('sw-btn-lap'), btnReset: document.getElementById('sw-btn-reset'), btnExport: document.getElementById('sw-btn-export'),
-        currentTime: document.getElementById('sw-currentTime') // ★追加
+        currentTime: document.getElementById('sw-currentTime')
     };
 
     function init() {
@@ -310,14 +307,12 @@ tabBtns.forEach(btn => {
             renderLaps();
         }
 
-        // ★現在時刻の定期更新を開始
         updateRealTime();
         setInterval(updateRealTime, 1000);
     }
     
     function saveState() { localStorage.setItem('stageTimerState', JSON.stringify(state)); }
 
-    // ★現在時刻の描画関数
     function updateRealTime() {
         if(els.currentTime) els.currentTime.textContent = `現在時刻: ${new Date().toLocaleTimeString()}`;
     }
@@ -443,7 +438,7 @@ tabBtns.forEach(btn => {
 
 
 // ==========================================
-// アプリ2: バータイマー ロジック (Flatpickr・通知・相対時間 復元)
+// アプリ2: バータイマー ロジック
 // ==========================================
 (() => {
     const els = {
@@ -457,7 +452,7 @@ tabBtns.forEach(btn => {
         mainBtn: document.getElementById('bt-mainBtn'),
         btnStartNow: document.getElementById('bt-btn-start-now'),
         btnClearAll: document.getElementById('bt-btn-clear-all'),
-        btnAddTop: document.getElementById('bt-btn-add-top'), // ★追加
+        btnAddTop: document.getElementById('bt-btn-add-top'),
         btnAddEmpty: document.getElementById('bt-btn-add-empty'),
         btnAddRel: document.getElementById('bt-btn-add-rel'),
         relMinsInput: document.getElementById('bt-relMins')
@@ -465,7 +460,7 @@ tabBtns.forEach(btn => {
 
     let isRunning = false;
     let wakeLock = null;
-    let lastNotifiedIndex = null; // 通知機能用
+    let lastNotifiedIndex = null;
 
     // --- 消灯防止 ---
     async function requestWakeLock() {
@@ -501,12 +496,12 @@ tabBtns.forEach(btn => {
         localStorage.setItem('barTimerSchedule', JSON.stringify(inputs));
     }
 
-    // ★変更：position ('bottom', 'after', 'top') を受け取れるように拡張
     function addInput(value, position = 'bottom', refElement = null) {
         const div = document.createElement('div');
         div.className = 'bt-time-row';
+        // ★ readonlyを削除して手入力可能に
         div.innerHTML = `
-            <input type="text" class="target-time" value="${value}" readonly placeholder="--:--">
+            <input type="text" class="target-time" value="${value}" placeholder="--:--">
             <button class="bt-btn-insert" title="この下に追加">＋</button>
             <button class="bt-btn-del" title="削除">×</button>
         `;
@@ -521,18 +516,45 @@ tabBtns.forEach(btn => {
             saveData(); 
         });
 
-        // ＋ボタン（途中挿入）の処理
         btnInsert.addEventListener('click', () => {
             addInput('', 'after', div);
         });
 
-        // 挿入場所の判定
+        // ★ 4桁数字での自動フォーマット機能
+        input.addEventListener('blur', function() {
+            let val = this.value.replace(/[^\d]/g, ''); // 数字以外を除去
+            if (val.length > 0) {
+                let h = "00", m = "00";
+                if (val.length === 1) { h = "0" + val; }
+                else if (val.length === 2) { h = val; }
+                else if (val.length === 3) { h = "0" + val.slice(0, 1); m = val.slice(1, 3); }
+                else if (val.length >= 4) { h = val.slice(0, 2); m = val.slice(2, 4); }
+                
+                // 上限の調整（24時間を超える場合は23時に、60分を超える場合は59分にする）
+                let hh = Math.min(23, parseInt(h));
+                let mm = Math.min(59, parseInt(m));
+                
+                let formatted = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+                this.value = formatted;
+                
+                if (this._flatpickr) {
+                    this._flatpickr.setDate(formatted, true);
+                }
+            }
+        });
+
+        // Enterキーで確定させる
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                this.blur();
+            }
+        });
+
         if (position === 'top') {
             els.container.insertBefore(div, els.container.firstChild);
         } else if (position === 'after' && refElement && refElement.nextSibling) {
             els.container.insertBefore(div, refElement.nextSibling);
         } else {
-            // 末尾に追加（'bottom'、もしくは対象の次要素がない場合）
             els.container.appendChild(div);
         }
 
@@ -541,7 +563,8 @@ tabBtns.forEach(btn => {
             noCalendar: true,
             dateFormat: "H:i",
             time_24hr: true,
-            disableMobile: true, // スマホ標準UIを回避する設定
+            disableMobile: true,
+            allowInput: true, // ★手入力を許可
             onChange: function() { saveData(); }
         });
         
@@ -571,11 +594,8 @@ tabBtns.forEach(btn => {
     });
 
     els.btnAddEmpty.addEventListener('click', () => addInput(''));
-    
-    // ★追加：先頭に追加ボタン
     els.btnAddTop.addEventListener('click', () => addInput('', 'top'));
 
-    // 復元：相対時間（〇〇分後）の追加ロジック
     els.btnAddRel.addEventListener('click', () => {
         const min = parseInt(els.relMinsInput.value) || 0;
         if (min <= 0) return;
@@ -630,7 +650,7 @@ tabBtns.forEach(btn => {
     });
 
     function setTimerState(state) {
-        requestNotificationPermission(); // 開始時に通知許可をリクエスト
+        requestNotificationPermission(); 
         isRunning = state;
         els.mainBtn.textContent = isRunning ? "ストップ" : "スタート";
         els.mainBtn.style.background = isRunning ? "#e67e22" : "#27ae60";
@@ -690,7 +710,6 @@ tabBtns.forEach(btn => {
             schedule[currentIndex].element.classList.add('bt-active-row');
             els.countdown.textContent = `${String(Math.floor(remainingMs / 60000)).padStart(2, '0')}:${String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, '0')}`;
 
-            // 復元：切り替わり時のプッシュ通知
             if (lastNotifiedIndex !== null && lastNotifiedIndex !== currentIndex) {
                 sendNotification("次の予定です", `${schedule[currentIndex].value} 〜 ${schedule[currentIndex+1].value} が始まりました。`);
             }
@@ -705,7 +724,6 @@ tabBtns.forEach(btn => {
             els.progressBar.style.width = '0%';
             els.countdown.textContent = "00:00";
             
-            // 復元：終了時のプッシュ通知
             if (lastNotifiedIndex !== 'finished') {
                 sendNotification("終了しました", "すべての予定スケジュールが完了しました。");
                 lastNotifiedIndex = 'finished';
