@@ -146,7 +146,6 @@
     .bt-btn-add-top { background: #8e44ad; color: white; flex: 1; }
     .bt-btn-clear { background: #7f8c8d; color: white; }
     
-    /* ★変更：スタートボタンの配置用スタイル（下マージンに変更） */
     .bt-start-btn { background: #27ae60; width: 100%; font-size: 1.5rem; padding: 15px; color: white; margin-bottom: 15px;}
     
     .bt-add-controls { display: flex; gap: 10px; margin-bottom: 15px; width: 100%; }
@@ -586,7 +585,7 @@ tabBtns.forEach(btn => {
                 if (input._flatpickr) input._flatpickr.destroy();
             });
             els.container.innerHTML = ''; 
-            addInput(''); // 消去後も空欄を1つ出す
+            addInput(''); 
             saveData();
         }
     });
@@ -702,7 +701,10 @@ tabBtns.forEach(btn => {
             
             els.progressBar.style.width = `${(remainingMs / (end - start)) * 100}%`;
             els.status.textContent = `${schedule[currentIndex].value} 〜 ${schedule[currentIndex+1].value}`;
-            schedule[currentIndex].element.classList.add('bt-active-row');
+            
+            // ★変更：現在のインデックス+1（＝目標時刻の行）をハイライトする
+            schedule[currentIndex+1].element.classList.add('bt-active-row');
+            
             els.countdown.textContent = `${String(Math.floor(remainingMs / 60000)).padStart(2, '0')}:${String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, '0')}`;
 
             if (lastNotifiedIndex !== null && lastNotifiedIndex !== currentIndex) {
@@ -714,6 +716,10 @@ tabBtns.forEach(btn => {
             els.status.textContent = "開始時刻を待っています...";
             els.progressBar.style.width = '100%';
             els.countdown.textContent = "--:--";
+            
+            // ★追加：開始前は一番最初（インデックス0）をハイライト
+            schedule[0].element.classList.add('bt-active-row');
+            
         } else {
             els.status.textContent = "すべての予定が終了しました";
             els.progressBar.style.width = '0%';
