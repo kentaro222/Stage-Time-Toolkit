@@ -144,7 +144,9 @@
     .bt-btn-insert { background: #2980b9; color: white; padding: 12px; flex-shrink: 0; }
     .bt-btn-action { background: #3498db; color: white; flex: 1; }
     .bt-btn-add-top { background: #8e44ad; color: white; flex: 1; }
-    .bt-btn-clear { background: #7f8c8d; color: white; }
+    
+    /* ★修正: 全消去ボタンを下部に綺麗に収めるためのスタイル */
+    .bt-btn-clear { background: #7f8c8d; color: white; flex: 1; margin: 0; }
     
     .bt-start-btn { background: #27ae60; width: 100%; font-size: 1.5rem; padding: 15px; color: white; margin-bottom: 15px;}
     
@@ -229,9 +231,8 @@
             <button class="bt-start-btn" id="bt-mainBtn">スタート</button>
 
             <div class="bt-controls-top">
-                <button class="bt-btn-action" id="bt-btn-start-now">現在で開始</button>
+                <button class="bt-btn-action" id="bt-btn-start-now">現時刻を追加</button>
                 <button class="bt-btn-add-top" id="bt-btn-add-top">先頭に追加</button>
-                <button class="bt-btn-clear" id="bt-btn-clear-all">消去</button>
             </div>
 
             <div id="bt-timeInputs"></div>
@@ -240,6 +241,7 @@
                 <div class="bt-rel-time-wrapper">
                     <input type="number" id="bt-relMins" class="bt-rel-time-input" value="15" min="1">
                     <button class="bt-btn-rel" id="bt-btn-add-rel">分後を追加</button>
+                    <button class="bt-btn-clear" id="bt-btn-clear-all">全消去</button>
                 </div>
             </div>
         </div>
@@ -460,6 +462,16 @@ tabBtns.forEach(btn => {
     let wakeLock = null;
     let lastNotifiedIndex = null;
 
+    // ★完全独立化した右上の現在時刻更新機能
+    function updateBarTimerClock() {
+        const now = new Date();
+        if (els.currentTime) {
+            els.currentTime.textContent = `現在時刻: ${now.toLocaleTimeString()}`;
+        }
+    }
+    updateBarTimerClock(); // 初期読み込み時に即座に実行
+    setInterval(updateBarTimerClock, 1000); // 1秒ごとに更新し続ける（エラーやStart/Stopの影響を一切受けない）
+
     // --- 消灯防止 ---
     async function requestWakeLock() {
         if (!('wakeLock' in navigator) || wakeLock !== null) return;
@@ -494,6 +506,7 @@ tabBtns.forEach(btn => {
         localStorage.setItem('barTimerSchedule', JSON.stringify(inputs));
     }
 
+    // ★'before'（指定要素の手前に挿入）を処理できるように拡張
     function addInput(value, position = 'bottom', refElement = null) {
         const div = document.createElement('div');
         div.className = 'bt-time-row';
@@ -548,6 +561,8 @@ tabBtns.forEach(btn => {
             els.container.insertBefore(div, els.container.firstChild);
         } else if (position === 'after' && refElement && refElement.nextSibling) {
             els.container.insertBefore(div, refElement.nextSibling);
+        } else if (position === 'before' && refElement) {
+            els.container.insertBefore(div, refElement);
         } else {
             els.container.appendChild(div);
         }
@@ -632,15 +647,40 @@ tabBtns.forEach(btn => {
         saveData();
     });
 
+    // ★「現時刻を追加」のシンプル化ロジック
     els.btnStartNow.addEventListener('click', () => {
         const now = new Date();
         const hh = String(now.getHours()).padStart(2, '0');
         const mm = String(now.getMinutes()).padStart(2, '0');
+        const currentTimeStr = `${hh}:${mm}`;
         
-        addInput(`${hh}:${mm}`, 'top');
+        // 現在時刻を分単位の数値に変換
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+        const inputsList = Array.from(els.container.querySelectorAll('.target-time')).filter(i => i.value !== "");
+        
+        let targetElement = null;
+
+        // パネルを上から順に見て、現在時刻より未来の時刻を最初に見つけたら記録
+        for (const input of inputsList) {
+            const [h, m] = input.value.split(':').map(Number);
+            const inputMinutes = h * 60 + m;
+            
+            if (inputMinutes > nowMinutes) {
+                targetElement = input.parentElement;
+                break;
+            }
+        }
+
+        if (targetElement) {
+            // 未来の時刻が見つかった場合、その手前に現在時刻を挿入
+            addInput(currentTimeStr, 'before', targetElement);
+        } else {
+            // 見つからなかった（全て過去か空欄）場合、翌日とみなして先頭に追加
+            addInput(currentTimeStr, 'top');
+        }
         
         saveData();
-        if (!isRunning) setTimerState(true);
     });
 
     function setTimerState(state) {
@@ -656,12 +696,19 @@ tabBtns.forEach(btn => {
 
     // --- メインループ ---
     function updateTime() {
-        const now = new Date();
-        els.currentTime.textContent = `現在時刻: ${now.toLocaleTimeString()}`;
         if (!isRunning) return;
 
         const inputsList = Array.from(els.container.querySelectorAll('.target-time')).filter(i => i.value !== "");
-        if (inputsList.length < 2) { els.status.textContent = "2つ以上の時刻が必要です"; return; }
+        
+        // エラー落ちを回避。時刻が足りない場合はステータスだけ更新して安全に待機
+        if (inputsList.length < 2) { 
+            els.status.textContent = "2つ以上の時刻が必要です";
+            els.countdown.textContent = "--:--";
+            els.progressBar.style.width = '0%';
+            return; 
+        }
+
+        const now = new Date();
 
         function buildSchedule(baseDate) {
             let dayOffset = 0, prevMinutes = -1;
@@ -702,7 +749,6 @@ tabBtns.forEach(btn => {
             els.progressBar.style.width = `${(remainingMs / (end - start)) * 100}%`;
             els.status.textContent = `${schedule[currentIndex].value} 〜 ${schedule[currentIndex+1].value}`;
             
-            // ★変更：現在のインデックス+1（＝目標時刻の行）をハイライトする
             schedule[currentIndex+1].element.classList.add('bt-active-row');
             
             els.countdown.textContent = `${String(Math.floor(remainingMs / 60000)).padStart(2, '0')}:${String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, '0')}`;
@@ -717,7 +763,6 @@ tabBtns.forEach(btn => {
             els.progressBar.style.width = '100%';
             els.countdown.textContent = "--:--";
             
-            // ★追加：開始前は一番最初（インデックス0）をハイライト
             schedule[0].element.classList.add('bt-active-row');
             
         } else {
