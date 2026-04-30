@@ -128,10 +128,9 @@
     #bt-progress-bar { width: 100%; height: 100%; background: var(--bt-accent); transition: width 0.5s linear; }
 
     .bt-settings { width: 100%; max-width: 500px; background: #222; padding: 20px; border-radius: 10px; }
-    .bt-controls-top { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 15px; }
+    .bt-controls-top { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
     
     .bt-time-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; width: 100%; }
-    
     .bt-time-row input[type="text"].target-time { 
         flex: 1; padding: 12px; border-radius: 5px; border: none; font-size: 18px; 
         background: #333; color: white; text-align: center; cursor: text; width: 100%; 
@@ -144,15 +143,16 @@
     .bt-btn-insert { background: #2980b9; color: white; padding: 12px; flex-shrink: 0; }
     .bt-btn-action { background: #3498db; color: white; flex: 1; }
     .bt-btn-add-top { background: #8e44ad; color: white; flex: 1; }
-    .bt-btn-clear { background: #7f8c8d; color: white; }
+    .bt-btn-clear { background: #7f8c8d; color: white; flex: 1; margin: 0; }
     
-    /* ★追加：ファイル保存用ボタンのスタイル */
+    /* ファイル保存/読込ボタン用スタイル */
     .bt-btn-file { background: #2c3e50; color: white; flex: 1; }
-
+    
     .bt-start-btn { background: #27ae60; width: 100%; font-size: 1.5rem; padding: 15px; color: white; margin-bottom: 15px;}
     
-    .bt-add-controls { display: flex; gap: 10px; margin-bottom: 15px; width: 100%; }
-    .bt-rel-time-wrapper { display: flex; gap: 5px; width: 100%; }
+    /* ★ UI変更: 追加コントロールのスタイル整理 */
+    .bt-add-controls { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; width: 100%; }
+    .bt-rel-time-wrapper { display: flex; gap: 8px; width: 100%; align-items: center;}
     .bt-rel-time-input { width: 70px; padding: 12px; border-radius: 5px; border: none; font-size: 16px; background: #333; color: white; text-align: center; }
     .bt-btn-rel { background: #9b59b6; color: white; flex: 1; margin: 0; }
     
@@ -231,6 +231,7 @@
         <div class="bt-settings">
             <button class="bt-start-btn" id="bt-mainBtn">スタート</button>
 
+            <!-- 操作ボタン群 -->
             <div class="bt-controls-top">
                 <button class="bt-btn-action" id="bt-btn-start-now">現時刻を追加</button>
                 <button class="bt-btn-add-top" id="bt-btn-add-top">空欄を先頭に追加</button>
@@ -238,14 +239,25 @@
 
             <div id="bt-timeInputs"></div>
             
+            <!-- ★ UI変更: 追加コントロール群 -->
             <div class="bt-add-controls">
+                <!-- パターン1：現時刻 + 〇〇分後 をスマートに追加 -->
+                <div class="bt-rel-time-wrapper">
+                    <span style="color: #ccc; white-space: nowrap; font-weight: bold;">現時刻 ＋</span>
+                    <input type="number" id="bt-nowRelMins" class="bt-rel-time-input" value="15" min="1">
+                    <button class="bt-btn-rel" id="bt-btn-now-and-rel" style="background:#d35400;">分後を追加</button>
+                </div>
+                
+                <!-- パターン2：最後尾の時刻から + 〇〇分後 を最後尾に追加 -->
                 <div class="bt-rel-time-wrapper">
                     <input type="number" id="bt-relMins" class="bt-rel-time-input" value="15" min="1">
-                    <button class="bt-btn-rel" id="bt-btn-add-rel">分後を追加</button>
-                    <button class="bt-btn-clear" id="bt-btn-clear-all">全消去</button>
+                    <button class="bt-btn-rel" id="bt-btn-add-rel">分後を最後尾に追加</button>
                 </div>
+                
+                <button class="bt-btn-clear" id="bt-btn-clear-all" style="margin-top: 5px;">全消去</button>
             </div>
 
+            <!-- ★ ファイル保存/読込エリア（一番下に配置） -->
             <div class="bt-file-controls" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #444; display: flex; flex-direction: column; gap: 10px;">
                 <input type="text" id="bt-filename-input" placeholder="保存するファイル名 (省略で自動日時)" style="padding: 12px; border-radius: 5px; border: 1px solid #555; font-size: 16px; background: #222; color: white; width: 100%;">
                 <div style="display: flex; gap: 10px;">
@@ -466,8 +478,9 @@ tabBtns.forEach(btn => {
         btnClearAll: document.getElementById('bt-btn-clear-all'),
         btnAddTop: document.getElementById('bt-btn-add-top'),
         btnAddRel: document.getElementById('bt-btn-add-rel'),
+        btnNowAndRel: document.getElementById('bt-btn-now-and-rel'),
         relMinsInput: document.getElementById('bt-relMins'),
-        // ★ファイル保存・読込用
+        nowRelMinsInput: document.getElementById('bt-nowRelMins'), // ★追加
         btnFileExport: document.getElementById('bt-btn-file-export'),
         btnFileImport: document.getElementById('bt-btn-file-import'),
         fileInput: document.getElementById('bt-file-input'),
@@ -478,7 +491,7 @@ tabBtns.forEach(btn => {
     let wakeLock = null;
     let lastNotifiedIndex = null;
 
-    // --- 右上の現在時刻更新 ---
+    // --- 完全独立化した右上の現在時刻更新 ---
     function updateBarTimerClock() {
         const now = new Date();
         if (els.currentTime) {
@@ -516,7 +529,7 @@ tabBtns.forEach(btn => {
         }
     }
 
-    // --- データ保存・展開 ---
+    // --- データ保存・展開（ローカルストレージ自動保存） ---
     function saveData() {
         const inputs = Array.from(els.container.querySelectorAll('.target-time')).map(i => i.value);
         localStorage.setItem('barTimerSchedule', JSON.stringify(inputs));
@@ -608,13 +621,11 @@ tabBtns.forEach(btn => {
         addInput('');
     }
 
-    // --- ★追加：ファイル保存（ダウンロード）と読込機能 ---
-    
-    // 設定を保存
+    // --- ファイル保存（ダウンロード）機能 ---
     els.btnFileExport.addEventListener('click', () => {
         const inputs = Array.from(els.container.querySelectorAll('.target-time'))
                             .map(i => i.value)
-                            .filter(v => v !== ""); // 空欄は保存しない
+                            .filter(v => v !== ""); 
         
         if (inputs.length === 0) return alert("保存する時刻がありません。");
         
@@ -624,7 +635,6 @@ tabBtns.forEach(btn => {
         const a = document.createElement('a');
         a.href = url;
         
-        // 入力されたファイル名を取得（未入力の場合は現在日時）
         let filename = els.filenameInput.value.trim();
         if (!filename) {
             const now = new Date();
@@ -632,7 +642,6 @@ tabBtns.forEach(btn => {
             filename = `stage_schedule_${dateStr}`;
         }
         
-        // .json拡張子がなければつける
         if (!filename.endsWith('.json')) {
             filename += '.json';
         }
@@ -642,12 +651,11 @@ tabBtns.forEach(btn => {
         URL.revokeObjectURL(url);
     });
 
-    // 設定を読込（ファイル選択ダイアログを開く）
+    // --- ファイル読込機能 ---
     els.btnFileImport.addEventListener('click', () => {
         els.fileInput.click();
     });
 
-    // ファイルが選択されたら読み込む
     els.fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -657,13 +665,11 @@ tabBtns.forEach(btn => {
             try {
                 const times = JSON.parse(event.target.result);
                 if (Array.isArray(times)) {
-                    // 現在の入力をすべて消す
                     els.container.querySelectorAll('.target-time').forEach(input => {
                         if (input._flatpickr) input._flatpickr.destroy();
                     });
                     els.container.innerHTML = '';
                     
-                    // 読み込んだ配列を展開
                     if (times.length > 0) {
                         times.forEach(t => addInput(t));
                     } else {
@@ -671,7 +677,6 @@ tabBtns.forEach(btn => {
                     }
                     saveData();
                     
-                    // 読み込んだファイル名を入力欄に反映（拡張子.jsonを省く）
                     let importedName = file.name;
                     if (importedName.endsWith('.json')) {
                         importedName = importedName.slice(0, -5);
@@ -687,12 +692,12 @@ tabBtns.forEach(btn => {
             }
         };
         reader.readAsText(file);
-        e.target.value = ''; // 同じファイルを再度選べるようにリセット
+        e.target.value = ''; 
     });
 
     // --- 各種ボタンイベント ---
     els.btnClearAll.addEventListener('click', () => {
-        if (confirm("設定した時刻をすべて消去しますか？")) {
+        if (confirm("設定した時刻をすべて全消去しますか？")) {
             els.container.querySelectorAll('.target-time').forEach(input => {
                 if (input._flatpickr) input._flatpickr.destroy();
             });
@@ -704,6 +709,7 @@ tabBtns.forEach(btn => {
 
     els.btnAddTop.addEventListener('click', () => addInput('', 'top'));
 
+    // 「分後を最後尾に追加」
     els.btnAddRel.addEventListener('click', () => {
         const min = parseInt(els.relMinsInput.value) || 0;
         if (min <= 0) return;
@@ -716,29 +722,57 @@ tabBtns.forEach(btn => {
         if (lastFilled) {
             const [h, m] = lastFilled.value.split(':').map(Number);
             baseDate.setHours(h, m, 0, 0);
-        } else {
-            const nowH = String(baseDate.getHours()).padStart(2, '0');
-            const nowM = String(baseDate.getMinutes()).padStart(2, '0');
-            const firstEmpty = inputs.find(i => i.value === "");
-            if (firstEmpty) {
-                firstEmpty._flatpickr.setDate(`${nowH}:${nowM}`);
-            } else {
-                addInput(`${nowH}:${nowM}`);
-            }
         }
-
+        
         baseDate.setMinutes(baseDate.getMinutes() + min);
         const newH = String(baseDate.getHours()).padStart(2, '0');
         const newM = String(baseDate.getMinutes()).padStart(2, '0');
         const targetTime = `${newH}:${newM}`;
 
-        const updatedInputs = Array.from(els.container.querySelectorAll('.target-time'));
-        const emptyInput = updatedInputs.find(i => i.value === "");
+        // ★修正: 最後尾に追加なのでシンプルに 'bottom' で追加
+        addInput(targetTime, 'bottom');
         
-        if (emptyInput) {
-            emptyInput._flatpickr.setDate(targetTime);
+        saveData();
+    });
+
+    // ★追加：「現時刻 ＋ [ ]分後を追加」
+    els.btnNowAndRel.addEventListener('click', () => {
+        const min = parseInt(els.nowRelMinsInput.value) || 0;
+        if (min <= 0) return;
+
+        const now = new Date();
+        const nowH = String(now.getHours()).padStart(2, '0');
+        const nowM = String(now.getMinutes()).padStart(2, '0');
+        const nowStr = `${nowH}:${nowM}`;
+
+        const futureDate = new Date(now);
+        futureDate.setMinutes(futureDate.getMinutes() + min);
+        const futH = String(futureDate.getHours()).padStart(2, '0');
+        const futM = String(futureDate.getMinutes()).padStart(2, '0');
+        const futStr = `${futH}:${futM}`;
+
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
+        const inputsList = Array.from(els.container.querySelectorAll('.target-time')).filter(i => i.value !== "");
+        
+        let targetElement = null;
+
+        for (const input of inputsList) {
+            const [h, m] = input.value.split(':').map(Number);
+            const inputMinutes = h * 60 + m;
+            
+            if (inputMinutes > nowMinutes) {
+                targetElement = input.parentElement;
+                break;
+            }
+        }
+
+        // 未来の時刻が見つかればその手前に挿入、なければ先頭に挿入
+        if (targetElement) {
+            addInput(nowStr, 'before', targetElement);
+            addInput(futStr, 'before', targetElement);
         } else {
-            addInput(targetTime);
+            addInput(futStr, 'top');
+            addInput(nowStr, 'top');
         }
         
         saveData();
@@ -791,6 +825,7 @@ tabBtns.forEach(btn => {
         if (!isRunning) return;
 
         const inputsList = Array.from(els.container.querySelectorAll('.target-time')).filter(i => i.value !== "");
+        
         if (inputsList.length < 2) { 
             els.status.textContent = "2つ以上の時刻が必要です"; 
             els.countdown.textContent = "--:--";
