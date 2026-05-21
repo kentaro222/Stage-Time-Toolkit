@@ -313,7 +313,7 @@ tabBtns.forEach(btn => {
 });
 
 // ==========================================
-// アプリ1: ストップウォッチ ロジック (変更なし)
+// アプリ1: ストップウォッチ ロジック
 // ==========================================
 (() => {
     let state = { isRunning: false, startTime: 0, accumulatedTime: 0, baseShowTime: null, laps: [] };
@@ -799,9 +799,10 @@ tabBtns.forEach(btn => {
             
             els.progressBar.style.width = `${(remainingMs / (end - start)) * 100}%`;
             
-            // ステータス表示にメモを反映
-            const currentText = schedule[currentIndex].memo ? `[${schedule[currentIndex].memo}]` : schedule[currentIndex].value;
-            const nextText = schedule[currentIndex+1].memo ? `[${schedule[currentIndex+1].memo}]` : schedule[currentIndex+1].value;
+            // ★ 修正箇所：時刻とメモの両方を結合して表示するように変更
+            const currentText = schedule[currentIndex].value + (schedule[currentIndex].memo ? ` [${schedule[currentIndex].memo}]` : "");
+            const nextText = schedule[currentIndex+1].value + (schedule[currentIndex+1].memo ? ` [${schedule[currentIndex+1].memo}]` : "");
+            
             els.status.textContent = `${currentText} 〜 ${nextText}`;
             
             schedule[currentIndex+1].element.classList.add('bt-active-row');
