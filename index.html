@@ -8,12 +8,12 @@
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js');
+      navigator.serviceWorker.register('sw.js').catch(() => {});
     });
   }
 </script>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="google" content="notranslate">
 <title>Stage Time Toolkit</title>
 
@@ -121,8 +121,18 @@
     #app-bartimer .indicator-dot.active { background-color: var(--bt-accent); box-shadow: 0 0 8px var(--bt-accent); }
 
     .bt-header { width: 100%; max-width: 600px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; color: #888; }
-    .bt-countdown { font-size: 5rem; font-weight: bold; font-variant-numeric: tabular-nums; margin: 10px 0; color: white; }
-    .bt-status { font-size: 1.2rem; color: #aaa; margin-bottom: 20px; text-align: center;}
+    .bt-countdown { font-size: 5rem; font-weight: bold; font-variant-numeric: tabular-nums; margin: 10px 0 4px; color: white; }
+    .bt-countdown-caption { font-size: 0.95rem; color: #888; margin-bottom: 18px; }
+
+    .bt-status { width: 100%; max-width: 600px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+    .bt-status-card { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+    .bt-status-label { font-size: 0.8rem; color: #888; margin-bottom: 5px; font-weight: bold; }
+    .bt-status-item { font-size: 1.25rem; color: white; font-weight: bold; overflow-wrap: anywhere; }
+    .bt-status-time { font-family: monospace; color: #aaa; font-size: 1rem; margin-top: 4px; }
+    .bt-status-card.current { border-color: var(--bt-accent); }
+    .bt-status-card.current .bt-status-label { color: var(--bt-accent); }
+    .bt-status-card.next { border-color: #666; }
+    .bt-status-message { grid-column: 1 / -1; color: #aaa; text-align: center; padding: 8px 0 0; font-size: 1rem; }
 
     .bt-progress-container { width: 100%; max-width: 600px; height: 40px; background: #333; border-radius: 20px; overflow: hidden; margin-bottom: 30px; box-shadow: inset 0 2px 5px rgba(0,0,0,0.5); }
     #bt-progress-bar { width: 100%; height: 100%; background: var(--bt-accent); transition: width 0.5s linear; }
@@ -162,17 +172,22 @@
     .bt-rel-time-wrapper { display: flex; gap: 8px; width: 100%; align-items: center; justify-content: space-between;}
     .bt-rel-time-input { width: 65px; padding: 12px; border-radius: 5px; border: none; font-size: 16px; background: #333; color: white; text-align: center; }
     .bt-btn-rel { background: #9b59b6; color: white; flex: 1; margin: 0; }
+    .bt-time-row input.bt-invalid-time { outline: 2px solid #ff5252; background: rgba(255,82,82,0.12); }
     
-    .bt-active-row { 
-        background: rgba(231, 76, 60, 0.2); 
-        box-shadow: inset 0 0 0 1px var(--bt-accent); 
+    .bt-current-row {
+        background: rgba(231, 76, 60, 0.2);
+        box-shadow: inset 0 0 0 1px var(--bt-accent);
         border-radius: 5px;
     }
-    .bt-active-row input[type="text"].target-time,
-    .bt-active-row input[type="text"].target-memo { 
-        color: var(--bt-accent); 
-        font-weight: bold; 
-        background: transparent; 
+    .bt-current-row input[type="text"].target-time,
+    .bt-current-row input[type="text"].target-memo {
+        color: var(--bt-accent);
+        font-weight: bold;
+        background: transparent;
+    }
+    .bt-next-row {
+        box-shadow: inset 0 0 0 1px #666;
+        border-radius: 5px;
     }
 
     @media (max-width: 600px) {
@@ -182,6 +197,7 @@
         .bt-controls-top { font-size: 0.85rem; }
         .bt-time-row input[type="text"].target-time { width: 65px; font-size: 15px; }
         .bt-time-row input[type="text"].target-memo { font-size: 14px; }
+        .bt-status { grid-template-columns: 1fr; }
     }
 </style>
 </head>
@@ -207,14 +223,14 @@
         <div id="sw-time-display">00:00:00</div>
 
         <div class="sw-controls">
-            <button id="sw-btn-start" class="primary">Start</button>
-            <button id="sw-btn-lap">Lap / Memo</button>
-            <button id="sw-btn-reset" class="danger">Reset</button>
+            <button id="sw-btn-start" class="primary">開始</button>
+            <button id="sw-btn-lap">ラップ / メモ</button>
+            <button id="sw-btn-reset" class="danger">リセット</button>
         </div>
 
         <div class="sw-lap-container">
             <div class="sw-lap-header">
-                <h3 style="margin:0;">記録 (Laps)</h3>
+                <h3 style="margin:0;">記録（ラップ）</h3>
                 <button id="sw-btn-export" style="background:#444; color:white; border:none; border-radius:4px; padding: 8px 15px; font-size: 0.9rem; cursor:pointer;">CSV出力</button>
             </div>
             <ul id="sw-lap-list" class="sw-lap-list"></ul>
@@ -231,7 +247,20 @@
         </div>
         
         <div class="bt-countdown" id="bt-countdown">00:00</div>
-        <div class="bt-status" id="bt-status">設定してください</div>
+        <div class="bt-countdown-caption" id="bt-countdown-caption">次の予定まで</div>
+        <div class="bt-status" id="bt-status">
+            <div class="bt-status-card current">
+                <div class="bt-status-label">現在</div>
+                <div class="bt-status-item" id="bt-current-item">設定してください</div>
+                <div class="bt-status-time" id="bt-current-item-time">--:--</div>
+            </div>
+            <div class="bt-status-card next">
+                <div class="bt-status-label">次</div>
+                <div class="bt-status-item" id="bt-next-item">--</div>
+                <div class="bt-status-time" id="bt-next-item-time">--:--</div>
+            </div>
+            <div class="bt-status-message" id="bt-status-message"></div>
+        </div>
 
         <div class="bt-progress-container">
             <div id="bt-progress-bar"></div>
@@ -241,7 +270,7 @@
             <button class="bt-start-btn" id="bt-mainBtn">スタート</button>
 
             <div class="bt-controls-top">
-                <button class="bt-btn-undo" id="bt-btn-undo" title="直前の操作を取り消す">↩ Undo</button>
+                <button class="bt-btn-undo" id="bt-btn-undo" title="直前の操作を取り消す">↩ 元に戻す</button>
                 <button class="bt-btn-action" id="bt-btn-start-now">現時刻を追加</button>
                 <button class="bt-btn-add-top" id="bt-btn-add-top">空欄を先頭に追加</button>
             </div>
@@ -252,7 +281,7 @@
                 
                 <div class="bt-rel-time-wrapper" style="background: #2a2a2a; padding: 10px; border-radius: 5px;">
                     <span style="color: #ccc; white-space: nowrap; font-weight: bold; font-size:0.9rem;">一括シフト:</span>
-                    <input type="number" id="bt-shiftMins" class="bt-rel-time-input" value="5" min="1">
+                    <input type="number" id="bt-shiftMins" class="bt-rel-time-input" value="1" min="1">
                     <button class="bt-btn-rel" id="bt-btn-shift-minus" style="background:#e67e22; padding: 12px 8px;">分 戻す(-)</button>
                     <button class="bt-btn-rel" id="bt-btn-shift-plus" style="background:#d35400; padding: 12px 8px;">分 進める(+)</button>
                 </div>
@@ -285,20 +314,30 @@
 
 <script>
 // ==========================================
-// タブ切り替えロジック
+// 共通ロジック
 // ==========================================
+function safeStorageGet(key) {
+    try { return localStorage.getItem(key); } catch (err) { return null; }
+}
+function safeStorageSet(key, value) {
+    try { localStorage.setItem(key, value); return true; } catch (err) { return false; }
+}
+function safeStorageRemove(key) {
+    try { localStorage.removeItem(key); } catch (err) {}
+}
+
+// タブ切り替え
 const tabBtns = document.querySelectorAll('.tab-btn');
-const savedTab = localStorage.getItem('stageActiveTab');
-if (savedTab) {
+const allowedTabs = new Set(['app-stopwatch', 'app-bartimer']);
+const savedTab = safeStorageGet('stageActiveTab');
+if (savedTab && allowedTabs.has(savedTab)) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.app-container').forEach(c => c.classList.remove('active'));
-    const targetBtn = document.querySelector(`.tab-btn[data-target="${savedTab}"]`);
-    if (targetBtn) {
+    const targetBtn = Array.from(tabBtns).find(b => b.dataset.target === savedTab);
+    const targetApp = document.getElementById(savedTab);
+    if (targetBtn && targetApp) {
         targetBtn.classList.add('active');
-        document.getElementById(savedTab).classList.add('active');
-    } else {
-        tabBtns[0].classList.add('active');
-        document.getElementById(tabBtns[0].dataset.target).classList.add('active');
+        targetApp.classList.add('active');
     }
 }
 tabBtns.forEach(btn => {
@@ -307,53 +346,99 @@ tabBtns.forEach(btn => {
         document.querySelectorAll('.app-container').forEach(c => c.classList.remove('active'));
         btn.classList.add('active');
         const targetId = btn.dataset.target;
-        document.getElementById(targetId).classList.add('active');
-        localStorage.setItem('stageActiveTab', targetId);
+        const targetApp = document.getElementById(targetId);
+        if (targetApp) targetApp.classList.add('active');
+        safeStorageSet('stageActiveTab', targetId);
     });
 });
 
 // ==========================================
-// アプリ1: ストップウォッチ ロジック
+// アプリ1: ストップウォッチ
 // ==========================================
 (() => {
-    let state = { isRunning: false, startTime: 0, accumulatedTime: 0, baseShowTime: null, laps: [] };
+    const emptyState = () => ({ isRunning: false, startTime: 0, accumulatedTime: 0, baseShowTime: null, laps: [] });
+    let state = emptyState();
     let animationFrameId = null;
     let wakeLock = null;
 
     const els = {
-        timeDisplay: document.getElementById('sw-time-display'), lapList: document.getElementById('sw-lap-list'),
-        btnStart: document.getElementById('sw-btn-start'), baseTimeInput: document.getElementById('sw-base-time-input'),
-        btnWakeLock: document.getElementById('sw-btn-wakelock'), wakeLockDot: document.getElementById('sw-wake-lock-dot'),
-        btnLap: document.getElementById('sw-btn-lap'), btnReset: document.getElementById('sw-btn-reset'), btnExport: document.getElementById('sw-btn-export'),
+        timeDisplay: document.getElementById('sw-time-display'),
+        lapList: document.getElementById('sw-lap-list'),
+        btnStart: document.getElementById('sw-btn-start'),
+        baseTimeInput: document.getElementById('sw-base-time-input'),
+        btnWakeLock: document.getElementById('sw-btn-wakelock'),
+        wakeLockDot: document.getElementById('sw-wake-lock-dot'),
+        btnLap: document.getElementById('sw-btn-lap'),
+        btnReset: document.getElementById('sw-btn-reset'),
+        btnExport: document.getElementById('sw-btn-export'),
         currentTime: document.getElementById('sw-currentTime')
     };
 
+    function isValidState(data) {
+        return data && typeof data === 'object' &&
+            typeof data.isRunning === 'boolean' &&
+            Number.isFinite(data.startTime) && Number.isFinite(data.accumulatedTime) &&
+            (data.baseShowTime === null || Number.isFinite(data.baseShowTime)) &&
+            Array.isArray(data.laps);
+    }
+
+    function normalizeLaps(laps) {
+        return laps.filter(l => l && typeof l === 'object').map((l, index) => ({
+            id: Number.isFinite(l.id) ? l.id : Date.now() + index,
+            number: Number.isFinite(l.number) ? l.number : index + 1,
+            elapsed: Number.isFinite(l.elapsed) ? l.elapsed : 0,
+            realTime: typeof l.realTime === 'string' ? l.realTime : '--:--:--',
+            memo: typeof l.memo === 'string' ? l.memo : ''
+        }));
+    }
+
     function init() {
-        const saved = localStorage.getItem('stageTimerState');
+        const saved = safeStorageGet('stageTimerState');
         if (saved) {
-            state = JSON.parse(saved);
-            updateBaseTimeDisplay();
-            if (state.isRunning) {
-                requestAnimationFrame(updateTime);
-                els.btnStart.textContent = "Stop"; els.btnStart.classList.remove("primary");
-                requestWakeLock();
-            } else { renderTime(state.accumulatedTime); }
-            renderLaps();
+            try {
+                const parsed = JSON.parse(saved);
+                if (!isValidState(parsed)) throw new Error('invalid state');
+                parsed.laps = normalizeLaps(parsed.laps);
+                state = parsed;
+            } catch (err) {
+                state = emptyState();
+                safeStorageRemove('stageTimerState');
+                console.warn('ストップウォッチの保存データを初期化しました。', err);
+            }
+        }
+        updateBaseTimeDisplay();
+        renderLaps();
+        if (state.isRunning) {
+            els.btnStart.textContent = '停止';
+            els.btnStart.classList.remove('primary');
+            updateTime();
+            requestWakeLock(false);
+        } else {
+            renderTime(state.accumulatedTime);
         }
         updateRealTime();
         setInterval(updateRealTime, 1000);
     }
-    function saveState() { localStorage.setItem('stageTimerState', JSON.stringify(state)); }
-    function updateRealTime() { if(els.currentTime) els.currentTime.textContent = `現在時刻: ${new Date().toLocaleTimeString()}`; }
+
+    function saveState() {
+        if (!safeStorageSet('stageTimerState', JSON.stringify(state))) {
+            console.warn('ストップウォッチの状態を保存できませんでした。');
+        }
+    }
+    function updateRealTime() {
+        els.currentTime.textContent = `現在時刻: ${new Date().toLocaleTimeString()}`;
+    }
     function formatTime(ms) {
         const isNegative = ms < 0;
         const totalSeconds = Math.floor(Math.abs(ms) / 1000);
         const hours = Math.floor(totalSeconds / 3600);
         const minutes = Math.floor((totalSeconds % 3600) / 60);
         const seconds = totalSeconds % 60;
-        return `${isNegative ? "-" : ""}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        return `${isNegative ? '-' : ''}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
     }
-    function formatRealTime(date = new Date()) { return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`; }
+    function formatRealTime(date = new Date()) {
+        return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
+    }
     function renderTime(ms) { els.timeDisplay.textContent = formatTime(ms); }
     function updateTime() {
         if (!state.isRunning) return;
@@ -361,71 +446,171 @@ tabBtns.forEach(btn => {
         animationFrameId = requestAnimationFrame(updateTime);
     }
     function updateBaseTimeDisplay() {
-        if (state.baseShowTime) { els.baseTimeInput.value = formatRealTime(new Date(state.baseShowTime)); els.baseTimeInput.disabled = false; }
-        else { els.baseTimeInput.value = ""; els.baseTimeInput.disabled = true; }
+        if (state.baseShowTime) {
+            els.baseTimeInput.value = formatRealTime(new Date(state.baseShowTime));
+            els.baseTimeInput.disabled = false;
+        } else {
+            els.baseTimeInput.value = '';
+            els.baseTimeInput.disabled = true;
+        }
     }
-    els.baseTimeInput.addEventListener('change', (e) => {
+
+    els.baseTimeInput.addEventListener('change', e => {
         if (!state.baseShowTime || !e.target.value) return;
         const [hours, minutes, seconds] = e.target.value.split(':').map(Number);
+        if (![hours, minutes, seconds || 0].every(Number.isFinite)) return;
         const oldDate = new Date(state.baseShowTime);
         const newTimestamp = new Date(oldDate.getFullYear(), oldDate.getMonth(), oldDate.getDate(), hours, minutes, seconds || 0).getTime();
-        state.accumulatedTime += (state.baseShowTime - newTimestamp);
+        state.accumulatedTime += state.baseShowTime - newTimestamp;
         state.baseShowTime = newTimestamp;
         if (!state.isRunning) renderTime(state.accumulatedTime);
         saveState();
     });
-    async function requestWakeLock() {
-        if (!('wakeLock' in navigator) || wakeLock !== null) return;
-        try { wakeLock = await navigator.wakeLock.request('screen'); els.wakeLockDot.classList.add('active'); els.btnWakeLock.classList.add('active-lock'); wakeLock.addEventListener('release', () => { els.wakeLockDot.classList.remove('active'); els.btnWakeLock.classList.remove('active-lock'); wakeLock = null; }); } catch (err) {}
+
+    function setWakeLockLabel(text, title) {
+        const label = els.btnWakeLock.querySelector('span');
+        if (label) label.textContent = text;
+        els.btnWakeLock.title = title;
     }
-    function releaseWakeLock() { if (wakeLock !== null) { wakeLock.release(); wakeLock = null; } }
-    els.btnWakeLock.addEventListener('click', () => wakeLock !== null ? releaseWakeLock() : requestWakeLock());
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && state.isRunning) requestWakeLock(); });
+    async function requestWakeLock(showFailure = true) {
+        if (wakeLock !== null) return;
+        if (!('wakeLock' in navigator)) {
+            setWakeLockLabel('消灯防止: 非対応', 'このブラウザでは画面の消灯防止を利用できません');
+            if (showFailure) alert('このブラウザでは消灯防止機能を利用できません。');
+            return;
+        }
+        try {
+            wakeLock = await navigator.wakeLock.request('screen');
+            els.wakeLockDot.classList.add('active');
+            els.btnWakeLock.classList.add('active-lock');
+            setWakeLockLabel('消灯防止 ON', 'クリックで消灯防止をOFF');
+            wakeLock.addEventListener('release', () => {
+                els.wakeLockDot.classList.remove('active');
+                els.btnWakeLock.classList.remove('active-lock');
+                wakeLock = null;
+                setWakeLockLabel('消灯防止', 'クリックで消灯防止をON/OFF');
+            });
+        } catch (err) {
+            wakeLock = null;
+            setWakeLockLabel('消灯防止: 失敗', '消灯防止を有効にできませんでした');
+            if (showFailure) alert('消灯防止を有効にできませんでした。端末やブラウザの設定を確認してください。');
+        }
+    }
+    async function releaseWakeLock() {
+        if (wakeLock !== null) {
+            try { await wakeLock.release(); } catch (err) {}
+            wakeLock = null;
+        }
+    }
+    els.btnWakeLock.addEventListener('click', () => wakeLock !== null ? releaseWakeLock() : requestWakeLock(true));
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && state.isRunning) requestWakeLock(false);
+    });
+
     els.btnStart.addEventListener('click', () => {
         const now = Date.now();
         if (state.isRunning) {
-            state.accumulatedTime += now - state.startTime; state.isRunning = false;
-            els.btnStart.textContent = "Start"; els.btnStart.classList.add("primary");
-            cancelAnimationFrame(animationFrameId); releaseWakeLock();
+            state.accumulatedTime += now - state.startTime;
+            state.isRunning = false;
+            els.btnStart.textContent = '開始';
+            els.btnStart.classList.add('primary');
+            cancelAnimationFrame(animationFrameId);
+            releaseWakeLock();
         } else {
-            if (!state.baseShowTime && state.accumulatedTime === 0) { state.baseShowTime = now; updateBaseTimeDisplay(); }
-            state.startTime = now; state.isRunning = true;
-            els.btnStart.textContent = "Stop"; els.btnStart.classList.remove("primary");
-            requestWakeLock(); updateTime();
+            if (!state.baseShowTime && state.accumulatedTime === 0) {
+                state.baseShowTime = now;
+                updateBaseTimeDisplay();
+            }
+            state.startTime = now;
+            state.isRunning = true;
+            els.btnStart.textContent = '停止';
+            els.btnStart.classList.remove('primary');
+            requestWakeLock(false);
+            updateTime();
         }
         saveState();
     });
+
     els.btnLap.addEventListener('click', () => {
-        const lapData = { id: Date.now(), number: state.laps.length + 1, elapsed: state.isRunning ? state.accumulatedTime + (Date.now() - state.startTime) : state.accumulatedTime, realTime: formatRealTime(new Date()), memo: "" };
-        state.laps.push(lapData); saveState(); appendLapToDOM(lapData);
+        const lapData = {
+            id: Date.now(),
+            number: state.laps.length + 1,
+            elapsed: state.isRunning ? state.accumulatedTime + (Date.now() - state.startTime) : state.accumulatedTime,
+            realTime: formatRealTime(new Date()),
+            memo: ''
+        };
+        state.laps.push(lapData);
+        saveState();
+        appendLapToDOM(lapData);
     });
+
     els.btnReset.addEventListener('click', () => {
-        if (confirm("記録をすべてリセットしますか？")) {
-            state = { isRunning: false, startTime: 0, accumulatedTime: 0, baseShowTime: null, laps: [] };
-            updateBaseTimeDisplay(); els.btnStart.textContent = "Start"; els.btnStart.classList.add("primary");
-            cancelAnimationFrame(animationFrameId); renderTime(0); els.lapList.innerHTML = '';
-            saveState(); releaseWakeLock();
-        }
+        if (!confirm('記録をすべてリセットしますか？')) return;
+        state = emptyState();
+        updateBaseTimeDisplay();
+        els.btnStart.textContent = '開始';
+        els.btnStart.classList.add('primary');
+        cancelAnimationFrame(animationFrameId);
+        renderTime(0);
+        els.lapList.replaceChildren();
+        saveState();
+        releaseWakeLock();
     });
-    function renderLaps() { els.lapList.innerHTML = ''; state.laps.forEach(appendLapToDOM); }
-    function appendLapToDOM(lap) {
-        const li = document.createElement('li'); li.className = 'sw-lap-item';
-        li.innerHTML = `<span>#${lap.number}</span><span>${formatTime(lap.elapsed)}</span><span style="color:#aaa;">${lap.realTime}</span><input type="text" placeholder="メモ..." value="${lap.memo}">`;
-        els.lapList.prepend(li);
-        li.querySelector('input').addEventListener('input', (e) => { const target = state.laps.find(l => l.id === lap.id); if (target) { target.memo = e.target.value; saveState(); } });
+
+    function renderLaps() {
+        els.lapList.replaceChildren();
+        state.laps.forEach(appendLapToDOM);
     }
+    function appendLapToDOM(lap) {
+        const li = document.createElement('li');
+        li.className = 'sw-lap-item';
+
+        const no = document.createElement('span');
+        no.textContent = `#${lap.number}`;
+        const elapsed = document.createElement('span');
+        elapsed.textContent = formatTime(lap.elapsed);
+        const realTime = document.createElement('span');
+        realTime.textContent = lap.realTime;
+        realTime.style.color = '#aaa';
+        const memo = document.createElement('input');
+        memo.type = 'text';
+        memo.placeholder = 'メモ...';
+        memo.value = lap.memo;
+        memo.maxLength = 500;
+        memo.addEventListener('input', e => {
+            const target = state.laps.find(l => l.id === lap.id);
+            if (target) {
+                target.memo = e.target.value;
+                saveState();
+            }
+        });
+
+        li.append(no, elapsed, realTime, memo);
+        els.lapList.prepend(li);
+    }
+
     els.btnExport.addEventListener('click', () => {
-        if (state.laps.length === 0) return alert("出力する記録がありません。");
-        let csv = "No,経過時間,現実時刻,メモ\n";
-        state.laps.forEach(l => csv += `${l.number},${formatTime(l.elapsed)},${l.realTime},"${l.memo.replace(/"/g, '""')}"\n`);
-        const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' }));
-        a.download = `stage_record_${formatRealTime().replace(/:/g, '')}.csv`; a.click();
+        if (state.laps.length === 0) return alert('出力する記録がありません。');
+        let csv = 'No,経過時間,現実時刻,メモ\n';
+        state.laps.forEach(l => {
+            const memo = String(l.memo || '').replace(/"/g, '""');
+            csv += `${l.number},${formatTime(l.elapsed)},${l.realTime},"${memo}"\n`;
+        });
+        const url = URL.createObjectURL(new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csv], { type: 'text/csv;charset=utf-8;' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `stage_record_${formatRealTime().replace(/:/g, '')}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
     });
+
     init();
 })();
 
 // ==========================================
-// アプリ2: バータイマー ロジック (拡張版)
+// アプリ2: 進行バータイマー（同一日専用）
 // ==========================================
 (() => {
     const els = {
@@ -433,8 +618,13 @@ tabBtns.forEach(btn => {
         btnWakeLock: document.getElementById('bt-btn-wakelock'),
         wakeLockDot: document.getElementById('bt-wake-lock-dot'),
         currentTime: document.getElementById('bt-currentTime'),
-        status: document.getElementById('bt-status'),
+        statusMessage: document.getElementById('bt-status-message'),
+        currentItem: document.getElementById('bt-current-item'),
+        currentItemTime: document.getElementById('bt-current-item-time'),
+        nextItem: document.getElementById('bt-next-item'),
+        nextItemTime: document.getElementById('bt-next-item-time'),
         countdown: document.getElementById('bt-countdown'),
+        countdownCaption: document.getElementById('bt-countdown-caption'),
         progressBar: document.getElementById('bt-progress-bar'),
         mainBtn: document.getElementById('bt-mainBtn'),
         btnStartNow: document.getElementById('bt-btn-start-now'),
@@ -456,385 +646,594 @@ tabBtns.forEach(btn => {
 
     let isRunning = false;
     let wakeLock = null;
-    let lastNotifiedIndex = null;
-    let undoBuffer = null; // Undo用の一時保存
+    let undoBuffer = null;
 
-    // --- 時計・消灯防止・通知 ---
-    function updateBarTimerClock() { const now = new Date(); if (els.currentTime) els.currentTime.textContent = `現在時刻: ${now.toLocaleTimeString()}`; }
-    updateBarTimerClock(); setInterval(updateBarTimerClock, 1000);
+    const numericSettingKeys = {
+        shift: 'barTimerShiftMins',
+        nowRel: 'barTimerNowRelMins',
+        rel: 'barTimerRelMins'
+    };
 
-    async function requestWakeLock() {
-        if (!('wakeLock' in navigator) || wakeLock !== null) return;
-        try { wakeLock = await navigator.wakeLock.request('screen'); els.wakeLockDot.classList.add('active'); els.btnWakeLock.classList.add('active-lock'); wakeLock.addEventListener('release', () => { els.wakeLockDot.classList.remove('active'); els.btnWakeLock.classList.remove('active-lock'); wakeLock = null; }); } catch (err) {}
+    function restoreNumericSettings() {
+        const settings = [
+            [els.shiftMinsInput, numericSettingKeys.shift, '1'],
+            [els.nowRelMinsInput, numericSettingKeys.nowRel, '15'],
+            [els.relMinsInput, numericSettingKeys.rel, '15']
+        ];
+        settings.forEach(([input, key, fallback]) => {
+            const saved = safeStorageGet(key);
+            input.value = saved !== null && Number.isFinite(Number(saved)) && Number(saved) >= 1 ? String(Math.floor(Number(saved))) : fallback;
+            const persist = () => {
+                const value = Math.floor(Number(input.value));
+                if (Number.isFinite(value) && value >= 1) safeStorageSet(key, String(value));
+            };
+            input.addEventListener('change', persist);
+            input.addEventListener('blur', persist);
+        });
     }
-    function releaseWakeLock() { if (wakeLock !== null) { wakeLock.release(); wakeLock = null; } }
-    els.btnWakeLock.addEventListener('click', () => wakeLock !== null ? releaseWakeLock() : requestWakeLock());
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && isRunning) requestWakeLock(); });
 
-    function requestNotificationPermission() { if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") Notification.requestPermission(); }
-    function sendNotification(title, body) { if ("Notification" in window && Notification.permission === "granted") new Notification(title, { body: body }); }
+    function updateBarTimerClock() {
+        els.currentTime.textContent = `現在時刻: ${new Date().toLocaleTimeString()}`;
+    }
+    updateBarTimerClock();
+    setInterval(updateBarTimerClock, 1000);
 
-    // --- データ保存・展開・Undo ---
+    function setWakeLockLabel(text, title) {
+        const label = els.btnWakeLock.querySelector('span');
+        if (label) label.textContent = text;
+        els.btnWakeLock.title = title;
+    }
+    async function requestWakeLock(showFailure = true) {
+        if (wakeLock !== null) return;
+        if (!('wakeLock' in navigator)) {
+            setWakeLockLabel('消灯防止: 非対応', 'このブラウザでは画面の消灯防止を利用できません');
+            if (showFailure) alert('このブラウザでは消灯防止機能を利用できません。');
+            return;
+        }
+        try {
+            wakeLock = await navigator.wakeLock.request('screen');
+            els.wakeLockDot.classList.add('active');
+            els.btnWakeLock.classList.add('active-lock');
+            setWakeLockLabel('消灯防止 ON', 'クリックで消灯防止をOFF');
+            wakeLock.addEventListener('release', () => {
+                els.wakeLockDot.classList.remove('active');
+                els.btnWakeLock.classList.remove('active-lock');
+                wakeLock = null;
+                setWakeLockLabel('消灯防止', 'クリックで消灯防止をON/OFF');
+            });
+        } catch (err) {
+            wakeLock = null;
+            setWakeLockLabel('消灯防止: 失敗', '消灯防止を有効にできませんでした');
+            if (showFailure) alert('消灯防止を有効にできませんでした。端末やブラウザの設定を確認してください。');
+        }
+    }
+    async function releaseWakeLock() {
+        if (wakeLock !== null) {
+            try { await wakeLock.release(); } catch (err) {}
+            wakeLock = null;
+        }
+    }
+    els.btnWakeLock.addEventListener('click', () => wakeLock !== null ? releaseWakeLock() : requestWakeLock(true));
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && isRunning) requestWakeLock(false);
+    });
+
+    function parseTimeToMinutes(value) {
+        const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(value || '').trim());
+        if (!match) return null;
+        return Number(match[1]) * 60 + Number(match[2]);
+    }
+    function minutesToTime(minutes) {
+        if (!Number.isInteger(minutes) || minutes < 0 || minutes >= 24 * 60) return null;
+        return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+    }
+    function normalizeTimeText(raw) {
+        const value = String(raw || '').trim();
+        if (!value) return '';
+        if (parseTimeToMinutes(value) !== null) return value;
+        const digits = value.replace(/\D/g, '');
+        let h, m;
+        if (digits.length === 1 || digits.length === 2) {
+            h = Number(digits);
+            m = 0;
+        } else if (digits.length === 3) {
+            h = Number(digits.slice(0, 1));
+            m = Number(digits.slice(1));
+        } else if (digits.length === 4) {
+            h = Number(digits.slice(0, 2));
+            m = Number(digits.slice(2));
+        } else {
+            return null;
+        }
+        if (!Number.isInteger(h) || !Number.isInteger(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+
+    function setInputValidity(input, valid) {
+        input.classList.toggle('bt-invalid-time', !valid);
+        input.setAttribute('aria-invalid', valid ? 'false' : 'true');
+    }
+
     function getScheduleData() {
         return Array.from(els.container.querySelectorAll('.bt-time-row')).map(row => ({
-            time: row.querySelector('.target-time').value,
+            time: row.querySelector('.target-time').value.trim(),
             memo: row.querySelector('.target-memo').value
         }));
     }
-
     function saveData() {
-        localStorage.setItem('barTimerSchedule', JSON.stringify(getScheduleData()));
+        if (!safeStorageSet('barTimerSchedule', JSON.stringify(getScheduleData()))) {
+            els.statusMessage.textContent = '設定を端末に保存できませんでした。';
+        }
     }
-
     function saveUndoState() {
         undoBuffer = JSON.stringify(getScheduleData());
     }
+    function destroyPicker(input) {
+        if (input && input._flatpickr && typeof input._flatpickr.destroy === 'function') input._flatpickr.destroy();
+    }
+    function clearRows() {
+        els.container.querySelectorAll('.target-time').forEach(destroyPicker);
+        els.container.replaceChildren();
+    }
 
-    els.btnUndo.addEventListener('click', () => {
-        if (!undoBuffer) return alert("取り消せる操作がありません。");
-        const data = JSON.parse(undoBuffer);
-        els.container.querySelectorAll('.target-time').forEach(input => { if (input._flatpickr) input._flatpickr.destroy(); });
-        els.container.innerHTML = '';
-        data.forEach(item => addInput(item.time, item.memo));
-        saveData();
-        undoBuffer = null; // Undoは1回のみ
-    });
+    function normalizeScheduleData(value, { allowEmpty = true } = {}) {
+        if (!Array.isArray(value) || value.length > 500) return null;
+        const result = [];
+        for (const item of value) {
+            let time = '';
+            let memo = '';
+            if (typeof item === 'string') {
+                time = item.trim();
+            } else if (item && typeof item === 'object') {
+                if (typeof item.time !== 'string' || (item.memo !== undefined && typeof item.memo !== 'string')) return null;
+                time = item.time.trim();
+                memo = item.memo || '';
+            } else {
+                return null;
+            }
+            if (!allowEmpty && !time) continue;
+            if (time && parseTimeToMinutes(time) === null) return null;
+            if (memo.length > 5000) return null;
+            result.push({ time, memo });
+        }
+        return result;
+    }
 
-    // --- 要素の追加 ---
     function addInput(timeValue = '', memoValue = '', position = 'bottom', refElement = null) {
         const div = document.createElement('div');
         div.className = 'bt-time-row';
-        div.innerHTML = `
-            <input type="text" class="target-time" value="${timeValue}" placeholder="--:--">
-            <input type="text" class="target-memo" value="${memoValue}" placeholder="項目名・メモ...">
-            <button class="bt-btn-insert" title="この下に追加">＋</button>
-            <button class="bt-btn-del" title="削除">×</button>
-        `;
-        
-        const input = div.querySelector('.target-time');
-        const memoInput = div.querySelector('.target-memo');
-        const btnDel = div.querySelector('.bt-btn-del');
-        const btnInsert = div.querySelector('.bt-btn-insert');
 
-        btnDel.addEventListener('click', () => { 
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'target-time';
+        input.value = typeof timeValue === 'string' ? timeValue : '';
+        input.placeholder = '--:--';
+        input.inputMode = 'numeric';
+        input.autocomplete = 'off';
+        input.setAttribute('aria-label', '時刻');
+
+        const memoInput = document.createElement('input');
+        memoInput.type = 'text';
+        memoInput.className = 'target-memo';
+        memoInput.value = typeof memoValue === 'string' ? memoValue : '';
+        memoInput.placeholder = '項目名・メモ...';
+        memoInput.maxLength = 5000;
+        memoInput.setAttribute('aria-label', '項目名・メモ');
+
+        const btnInsert = document.createElement('button');
+        btnInsert.type = 'button';
+        btnInsert.className = 'bt-btn-insert';
+        btnInsert.title = 'この下に追加';
+        btnInsert.setAttribute('aria-label', 'この下に追加');
+        btnInsert.textContent = '＋';
+
+        const btnDel = document.createElement('button');
+        btnDel.type = 'button';
+        btnDel.className = 'bt-btn-del';
+        btnDel.title = '削除';
+        btnDel.setAttribute('aria-label', '削除');
+        btnDel.textContent = '×';
+
+        div.append(input, memoInput, btnInsert, btnDel);
+
+        btnDel.addEventListener('click', () => {
             saveUndoState();
-            if (input._flatpickr) input._flatpickr.destroy();
-            div.remove(); 
-            saveData(); 
+            destroyPicker(input);
+            div.remove();
+            if (!els.container.querySelector('.bt-time-row')) addInput();
+            saveData();
         });
-
         btnInsert.addEventListener('click', () => {
             saveUndoState();
             addInput('', '', 'after', div);
         });
+        memoInput.addEventListener('input', saveData);
 
-        memoInput.addEventListener('input', () => saveData());
-
-        input.addEventListener('blur', function() {
-            let val = this.value.replace(/[^\d]/g, '');
-            if (val.length > 0) {
-                let h = "00", m = "00";
-                if (val.length === 1) { h = "0" + val; }
-                else if (val.length === 2) { h = val; }
-                else if (val.length === 3) { h = "0" + val.slice(0, 1); m = val.slice(1, 3); }
-                else if (val.length >= 4) { h = val.slice(0, 2); m = val.slice(2, 4); }
-                let hh = Math.min(23, parseInt(h));
-                let mm = Math.min(59, parseInt(m));
-                let formatted = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-                this.value = formatted;
-                if (this._flatpickr) this._flatpickr.setDate(formatted, true);
+        function commitTime() {
+            if (!input.value.trim()) {
+                setInputValidity(input, true);
+                saveData();
+                return;
             }
-        });
+            const normalized = normalizeTimeText(input.value);
+            if (normalized === null) {
+                setInputValidity(input, false);
+                els.statusMessage.textContent = '時刻は 00:00〜23:59 の範囲で入力してください。';
+                return;
+            }
+            input.value = normalized;
+            setInputValidity(input, true);
+            els.statusMessage.textContent = '';
+            if (input._flatpickr && typeof input._flatpickr.setDate === 'function') input._flatpickr.setDate(normalized, false);
+            saveData();
+        }
+        input.addEventListener('blur', commitTime);
+        input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+        input.addEventListener('input', () => setInputValidity(input, true));
 
-        input.addEventListener('keydown', function(e) { if (e.key === 'Enter') this.blur(); });
+        if (position === 'top') {
+            els.container.insertBefore(div, els.container.firstChild);
+        } else if (position === 'after' && refElement) {
+            refElement.after(div);
+        } else if (position === 'before' && refElement) {
+            refElement.before(div);
+        } else {
+            els.container.appendChild(div);
+        }
 
-        if (position === 'top') { els.container.insertBefore(div, els.container.firstChild); } 
-        else if (position === 'after' && refElement && refElement.nextSibling) { els.container.insertBefore(div, refElement.nextSibling); } 
-        else if (position === 'before' && refElement) { els.container.insertBefore(div, refElement); } 
-        else { els.container.appendChild(div); }
+        if (typeof window.flatpickr === 'function') {
+            try {
+                window.flatpickr(input, {
+                    enableTime: true,
+                    noCalendar: true,
+                    dateFormat: 'H:i',
+                    time_24hr: true,
+                    disableMobile: true,
+                    allowInput: true,
+                    onChange: () => { setInputValidity(input, true); saveData(); }
+                });
+            } catch (err) {
+                console.warn('時刻ピッカーを初期化できませんでした。通常入力を使用します。', err);
+            }
+        }
+        return div;
+    }
 
-        flatpickr(input, {
-            enableTime: true, noCalendar: true, dateFormat: "H:i", time_24hr: true, disableMobile: true, allowInput: true,
-            onChange: function() { saveData(); }
-        });
-        
+    function restoreRows(data) {
+        clearRows();
+        if (data.length === 0) addInput();
+        else data.forEach(item => addInput(item.time, item.memo));
         saveData();
     }
 
-    function loadData() {
-        const saved = localStorage.getItem('barTimerSchedule');
-        els.container.innerHTML = '';
-        if (saved) {
-            const times = JSON.parse(saved);
-            if (times.length > 0) {
-                times.forEach(t => {
-                    // 後方互換性（以前の配列文字列データへの対応）
-                    if (typeof t === 'string') addInput(t, ''); 
-                    else addInput(t.time, t.memo);
-                });
-                return;
-            }
+    els.btnUndo.addEventListener('click', () => {
+        if (!undoBuffer) return alert('取り消せる操作がありません。');
+        try {
+            const data = normalizeScheduleData(JSON.parse(undoBuffer));
+            if (!data) throw new Error('invalid undo data');
+            restoreRows(data);
+            undoBuffer = null;
+        } catch (err) {
+            undoBuffer = null;
+            alert('元に戻すデータが壊れているため復元できませんでした。');
         }
-        addInput();
+    });
+
+    function loadData() {
+        const saved = safeStorageGet('barTimerSchedule');
+        if (!saved) {
+            addInput();
+            return;
+        }
+        try {
+            const parsed = normalizeScheduleData(JSON.parse(saved));
+            if (!parsed) throw new Error('invalid schedule');
+            clearRows();
+            if (parsed.length === 0) addInput();
+            else parsed.forEach(item => addInput(item.time, item.memo));
+        } catch (err) {
+            safeStorageRemove('barTimerSchedule');
+            clearRows();
+            addInput();
+            els.statusMessage.textContent = '保存データを読み込めなかったため、初期状態に戻しました。';
+            console.warn('バータイマーの保存データを初期化しました。', err);
+        }
     }
 
-    // --- ファイル保存・読込 ---
     els.btnFileExport.addEventListener('click', () => {
-        const data = getScheduleData().filter(item => item.time !== ""); 
-        if (data.length === 0) return alert("保存する時刻がありません。");
-        
-        const blob = new Blob([JSON.stringify(data)], {type: "application/json"});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url;
-        
-        let filename = els.filenameInput.value.trim();
+        const data = getScheduleData().filter(item => item.time !== '');
+        const normalized = normalizeScheduleData(data, { allowEmpty: false });
+        if (!normalized || normalized.length === 0) return alert('保存する時刻がありません。');
+        const validation = validateScheduleRows(false);
+        if (!validation.ok) return alert(validation.message);
+
+        const url = URL.createObjectURL(new Blob([JSON.stringify(normalized, null, 2)], { type: 'application/json' }));
+        const a = document.createElement('a');
+        a.href = url;
+        let filename = els.filenameInput.value.trim().replace(/[\\/:*?"<>|]/g, '_');
         if (!filename) {
             const now = new Date();
-            const dateStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+            const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
             filename = `stage_schedule_${dateStr}`;
         }
-        if (!filename.endsWith('.json')) filename += '.json';
-        a.download = filename; a.click(); URL.revokeObjectURL(url);
+        if (!filename.toLowerCase().endsWith('.json')) filename += '.json';
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
     });
 
     els.btnFileImport.addEventListener('click', () => els.fileInput.click());
-
-    els.fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
+    els.fileInput.addEventListener('change', e => {
+        const file = e.target.files && e.target.files[0];
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            try {
-                saveUndoState();
-                const times = JSON.parse(event.target.result);
-                if (Array.isArray(times)) {
-                    els.container.querySelectorAll('.target-time').forEach(input => { if (input._flatpickr) input._flatpickr.destroy(); });
-                    els.container.innerHTML = '';
-                    if (times.length > 0) {
-                        times.forEach(t => {
-                            if (typeof t === 'string') addInput(t, ''); // 旧形式対応
-                            else addInput(t.time, t.memo);
-                        });
-                    } else { addInput(); }
-                    saveData();
-                    let importedName = file.name;
-                    if (importedName.endsWith('.json')) importedName = importedName.slice(0, -5);
-                    els.filenameInput.value = importedName;
-                    alert("スケジュールの読み込みが完了しました。");
-                } else { alert("対応していないファイル形式です。"); }
-            } catch (err) { alert("ファイルの読み込みに失敗しました。"); }
-        };
-        reader.readAsText(file); e.target.value = ''; 
-    });
-
-    // --- 各種操作ボタン ---
-    els.btnClearAll.addEventListener('click', () => {
-        if (confirm("設定した時刻をすべて全消去しますか？")) {
-            saveUndoState();
-            els.container.querySelectorAll('.target-time').forEach(input => { if (input._flatpickr) input._flatpickr.destroy(); });
-            els.container.innerHTML = ''; addInput(); saveData();
+        if (file.size > 2 * 1024 * 1024) {
+            alert('ファイルが大きすぎます。2MB以下のJSONを使用してください。');
+            e.target.value = '';
+            return;
         }
+        const reader = new FileReader();
+        reader.onload = event => {
+            try {
+                const parsed = normalizeScheduleData(JSON.parse(String(event.target.result || '')));
+                if (!parsed) throw new Error('invalid file');
+                saveUndoState();
+                restoreRows(parsed);
+                els.filenameInput.value = file.name.replace(/\.json$/i, '');
+                alert('スケジュールの読み込みが完了しました。');
+            } catch (err) {
+                alert('ファイル形式が正しくありません。時刻は HH:MM 形式で保存してください。');
+            }
+        };
+        reader.onerror = () => alert('ファイルの読み込みに失敗しました。');
+        reader.readAsText(file);
+        e.target.value = '';
     });
 
-    els.btnAddTop.addEventListener('click', () => { saveUndoState(); addInput('', '', 'top'); });
-
-    // 一括シフト（増減）
-    function shiftAllTimes(minutes) {
-        if(minutes === 0) return;
+    els.btnClearAll.addEventListener('click', () => {
+        if (!confirm('設定した時刻をすべて全消去しますか？')) return;
         saveUndoState();
-        let changed = false;
-        Array.from(els.container.querySelectorAll('.target-time')).forEach(input => {
-            if (!input.value) return;
-            const [h, m] = input.value.split(':').map(Number);
-            const d = new Date();
-            d.setHours(h, m, 0, 0);
-            d.setMinutes(d.getMinutes() + minutes);
-            const newTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-            input.value = newTime;
-            if (input._flatpickr) input._flatpickr.setDate(newTime, true);
-            changed = true;
-        });
-        if(changed) saveData();
+        clearRows();
+        addInput();
+        saveData();
+        if (isRunning) setTimerState(false);
+        renderIdle();
+    });
+    els.btnAddTop.addEventListener('click', () => {
+        saveUndoState();
+        addInput('', '', 'top');
+    });
+
+    function getFilledRows() {
+        return Array.from(els.container.querySelectorAll('.bt-time-row')).filter(row => row.querySelector('.target-time').value.trim() !== '');
     }
-    els.btnShiftPlus.addEventListener('click', () => shiftAllTimes(parseInt(els.shiftMinsInput.value) || 0));
-    els.btnShiftMinus.addEventListener('click', () => shiftAllTimes(-(parseInt(els.shiftMinsInput.value) || 0)));
+    function validateScheduleRows(markInvalid = true) {
+        const rows = getFilledRows();
+        if (rows.length < 2) return { ok: false, message: '2つ以上の時刻が必要です。', rows: [] };
+        let previous = -1;
+        const schedule = [];
+        for (let i = 0; i < rows.length; i++) {
+            const input = rows[i].querySelector('.target-time');
+            const minutes = parseTimeToMinutes(input.value);
+            if (minutes === null) {
+                if (markInvalid) setInputValidity(input, false);
+                return { ok: false, message: `${i + 1}行目の時刻が正しくありません。`, rows: [] };
+            }
+            if (minutes <= previous) {
+                if (markInvalid) setInputValidity(input, false);
+                return { ok: false, message: '時刻は上から順に、同じ日の中で昇順に設定してください。', rows: [] };
+            }
+            if (markInvalid) setInputValidity(input, true);
+            previous = minutes;
+            schedule.push({
+                minutes,
+                value: input.value,
+                memo: rows[i].querySelector('.target-memo').value,
+                element: rows[i]
+            });
+        }
+        return { ok: true, message: '', rows: schedule };
+    }
+
+    function shiftAllTimes(delta) {
+        if (!Number.isInteger(delta) || delta === 0) return;
+        const rows = getFilledRows();
+        if (rows.length === 0) return;
+        const shifted = [];
+        for (const row of rows) {
+            const input = row.querySelector('.target-time');
+            const current = parseTimeToMinutes(input.value);
+            if (current === null) return alert('正しくない時刻があります。先に修正してください。');
+            const next = current + delta;
+            if (next < 0 || next >= 24 * 60) return alert('日付を跨ぐ一括シフトはできません。');
+            shifted.push([input, next]);
+        }
+        saveUndoState();
+        shifted.forEach(([input, minutes]) => {
+            const value = minutesToTime(minutes);
+            input.value = value;
+            setInputValidity(input, true);
+            if (input._flatpickr && typeof input._flatpickr.setDate === 'function') input._flatpickr.setDate(value, false);
+        });
+        saveData();
+        const validation = validateScheduleRows(false);
+        if (!validation.ok) els.statusMessage.textContent = validation.message;
+    }
+    els.btnShiftPlus.addEventListener('click', () => shiftAllTimes(Math.floor(Number(els.shiftMinsInput.value)) || 0));
+    els.btnShiftMinus.addEventListener('click', () => shiftAllTimes(-(Math.floor(Number(els.shiftMinsInput.value)) || 0)));
 
     els.btnAddRel.addEventListener('click', () => {
-        const min = parseInt(els.relMinsInput.value) || 0;
-        if (min <= 0) return;
-        saveUndoState();
-        const inputs = Array.from(els.container.querySelectorAll('.target-time'));
-        let baseDate = new Date();
-        const lastFilled = [...inputs].reverse().find(input => input.value !== "");
-        if (lastFilled) {
-            const [h, m] = lastFilled.value.split(':').map(Number);
-            baseDate.setHours(h, m, 0, 0);
+        const min = Math.floor(Number(els.relMinsInput.value));
+        if (!Number.isFinite(min) || min <= 0) return alert('追加する分数は1以上にしてください。');
+        const rows = getFilledRows();
+        let baseMinutes;
+        if (rows.length > 0) {
+            baseMinutes = parseTimeToMinutes(rows[rows.length - 1].querySelector('.target-time').value);
+            if (baseMinutes === null) return alert('最後の時刻が正しくありません。');
+        } else {
+            const now = new Date();
+            baseMinutes = now.getHours() * 60 + now.getMinutes();
         }
-        baseDate.setMinutes(baseDate.getMinutes() + min);
-        const targetTime = `${String(baseDate.getHours()).padStart(2, '0')}:${String(baseDate.getMinutes()).padStart(2, '0')}`;
-        addInput(targetTime, '', 'bottom');
+        const target = baseMinutes + min;
+        if (target >= 24 * 60) return alert('日付を跨ぐ時刻は追加できません。');
+        saveUndoState();
+        addInput(minutesToTime(target), '', 'bottom');
         saveData();
     });
 
-    // 現時刻 ＋ 〇〇分後 をスマートに追加 (重複防止対応)
+    function insertChronologically(timeValue, memoValue) {
+        const targetMinutes = parseTimeToMinutes(timeValue);
+        if (targetMinutes === null) return null;
+        const rows = getFilledRows();
+        const duplicate = rows.find(row => parseTimeToMinutes(row.querySelector('.target-time').value) === targetMinutes);
+        if (duplicate) return duplicate;
+        const later = rows.find(row => {
+            const m = parseTimeToMinutes(row.querySelector('.target-time').value);
+            return m !== null && m > targetMinutes;
+        });
+        return later ? addInput(timeValue, memoValue, 'before', later) : addInput(timeValue, memoValue, 'bottom');
+    }
+
     els.btnNowAndRel.addEventListener('click', () => {
-        const min = parseInt(els.nowRelMinsInput.value) || 0;
-        if (min <= 0) return;
-        saveUndoState();
-
+        const min = Math.floor(Number(els.nowRelMinsInput.value));
+        if (!Number.isFinite(min) || min <= 0) return alert('追加する分数は1以上にしてください。');
         const now = new Date();
-        const nowStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-        const futureDate = new Date(now);
-        futureDate.setMinutes(futureDate.getMinutes() + min);
-        const futStr = `${String(futureDate.getHours()).padStart(2, '0')}:${String(futureDate.getMinutes()).padStart(2, '0')}`;
-
         const nowMinutes = now.getHours() * 60 + now.getMinutes();
-        const inputsList = Array.from(els.container.querySelectorAll('.target-time')).filter(i => i.value !== "");
-        
-        let targetElement = null;
-        let existsNow = false;
-
-        for (const input of inputsList) {
-            if (input.value === nowStr) existsNow = true;
-            const [h, m] = input.value.split(':').map(Number);
-            if ((h * 60 + m) > nowMinutes && !targetElement) targetElement = input.parentElement;
-        }
-
-        if (targetElement) {
-            if (!existsNow) addInput(nowStr, '現在時刻', 'before', targetElement);
-            addInput(futStr, `${min}分後`, 'before', targetElement);
-        } else {
-            addInput(futStr, `${min}分後`, 'top');
-            if (!existsNow) addInput(nowStr, '現在時刻', 'top');
-        }
+        const futureMinutes = nowMinutes + min;
+        if (futureMinutes >= 24 * 60) return alert('日付を跨ぐ時刻は追加できません。');
+        saveUndoState();
+        insertChronologically(minutesToTime(nowMinutes), '現在時刻');
+        insertChronologically(minutesToTime(futureMinutes), `${min}分後`);
         saveData();
     });
 
     els.btnStartNow.addEventListener('click', () => {
-        saveUndoState();
         const now = new Date();
-        const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
         const nowMinutes = now.getHours() * 60 + now.getMinutes();
-        
-        const inputsList = Array.from(els.container.querySelectorAll('.target-time')).filter(i => i.value !== "");
-        let targetElement = null;
-        let existsNow = false;
-
-        for (const input of inputsList) {
-            if (input.value === currentTimeStr) existsNow = true;
-            const [h, m] = input.value.split(':').map(Number);
-            if ((h * 60 + m) > nowMinutes && !targetElement) targetElement = input.parentElement;
-        }
-        
-        if (!existsNow) {
-            if (targetElement) addInput(currentTimeStr, '現時刻', 'before', targetElement);
-            else addInput(currentTimeStr, '現時刻', 'top');
-            saveData();
-        }
+        saveUndoState();
+        insertChronologically(minutesToTime(nowMinutes), '現時刻');
+        saveData();
     });
 
-    function setTimerState(state) {
-        requestNotificationPermission(); 
-        isRunning = state;
-        els.mainBtn.textContent = isRunning ? "ストップ" : "スタート";
-        els.mainBtn.style.background = isRunning ? "#e67e22" : "#27ae60";
-        if (isRunning) lastNotifiedIndex = null;
-        isRunning ? requestWakeLock() : releaseWakeLock();
+    function renderIdle() {
+        els.currentItem.textContent = '設定してください';
+        els.currentItemTime.textContent = '--:--';
+        els.nextItem.textContent = '--';
+        els.nextItemTime.textContent = '--:--';
+        els.countdown.textContent = '00:00';
+        els.countdownCaption.textContent = '次の予定まで';
+        els.progressBar.style.width = '0%';
+        els.container.querySelectorAll('.bt-time-row').forEach(row => row.classList.remove('bt-current-row', 'bt-next-row'));
+    }
+
+    function setTimerState(nextState) {
+        if (nextState) {
+            const validation = validateScheduleRows(true);
+            if (!validation.ok) {
+                els.statusMessage.textContent = validation.message;
+                isRunning = false;
+                safeStorageSet('barTimerIsRunning', 'false');
+                els.mainBtn.textContent = 'スタート';
+                els.mainBtn.style.background = '#27ae60';
+                return;
+            }
+            els.statusMessage.textContent = '';
+        }
+        isRunning = nextState;
+        safeStorageSet('barTimerIsRunning', String(isRunning));
+        els.mainBtn.textContent = isRunning ? 'ストップ' : 'スタート';
+        els.mainBtn.style.background = isRunning ? '#e67e22' : '#27ae60';
+        if (isRunning) {
+            requestWakeLock(false);
+            updateTime();
+        } else {
+            releaseWakeLock();
+        }
     }
     els.mainBtn.addEventListener('click', () => setTimerState(!isRunning));
 
-    // --- メインループ ---
     function updateTime() {
         if (!isRunning) return;
-
-        const rowElements = Array.from(els.container.querySelectorAll('.bt-time-row')).filter(r => r.querySelector('.target-time').value !== "");
-        
-        if (rowElements.length < 2) { 
-            els.status.textContent = "2つ以上の時刻が必要です"; 
-            els.countdown.textContent = "--:--";
+        const validation = validateScheduleRows(true);
+        if (!validation.ok) {
+            els.statusMessage.textContent = validation.message;
+            els.countdown.textContent = '--:--';
             els.progressBar.style.width = '0%';
-            return; 
+            setTimerState(false);
+            return;
         }
 
+        const schedule = validation.rows;
         const now = new Date();
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
+        const nowSeconds = now.getSeconds();
+        const currentMinuteWithSeconds = nowMinutes + nowSeconds / 60;
 
-        function buildSchedule(baseDate) {
-            let dayOffset = 0, prevMinutes = -1;
-            return rowElements.map(row => {
-                const input = row.querySelector('.target-time');
-                const memoInput = row.querySelector('.target-memo');
-                const [h, m] = input.value.split(':').map(Number);
-                const mins = h * 60 + m;
-                if (prevMinutes !== -1 && mins < prevMinutes) dayOffset++;
-                prevMinutes = mins;
-                const d = new Date(baseDate);
-                d.setDate(d.getDate() + dayOffset);
-                d.setHours(h, m, 0, 0);
-                return { time: d, element: row, value: input.value, memo: memoInput.value };
-            });
-        }
-
-        const today = new Date(now); today.setHours(0, 0, 0, 0);
-        const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
-
-        let schedule = buildSchedule(today);
-        const scheduleYesterday = buildSchedule(yesterday);
-        const nowTime = now.getTime();
-
-        if (nowTime >= scheduleYesterday[0].time.getTime() && nowTime < scheduleYesterday[scheduleYesterday.length - 1].time.getTime()) {
-            schedule = scheduleYesterday;
-        }
+        els.container.querySelectorAll('.bt-time-row').forEach(row => row.classList.remove('bt-current-row', 'bt-next-row'));
 
         let currentIndex = -1;
         for (let i = 0; i < schedule.length - 1; i++) {
-            if (nowTime >= schedule[i].time.getTime() && nowTime < schedule[i+1].time.getTime()) { currentIndex = i; break; }
+            if (currentMinuteWithSeconds >= schedule[i].minutes && currentMinuteWithSeconds < schedule[i + 1].minutes) {
+                currentIndex = i;
+                break;
+            }
         }
 
-        rowElements.forEach(r => r.classList.remove('bt-active-row'));
-
         if (currentIndex !== -1) {
-            const start = schedule[currentIndex].time.getTime(), end = schedule[currentIndex+1].time.getTime();
-            const remainingMs = end - nowTime;
-            
-            els.progressBar.style.width = `${(remainingMs / (end - start)) * 100}%`;
-            
-            // ★ 修正箇所：時刻とメモの両方を結合して表示するように変更
-            const currentText = schedule[currentIndex].value + (schedule[currentIndex].memo ? ` [${schedule[currentIndex].memo}]` : "");
-            const nextText = schedule[currentIndex+1].value + (schedule[currentIndex+1].memo ? ` [${schedule[currentIndex+1].memo}]` : "");
-            
-            els.status.textContent = `${currentText} 〜 ${nextText}`;
-            
-            schedule[currentIndex+1].element.classList.add('bt-active-row');
-            
+            const startMs = schedule[currentIndex].minutes * 60 * 1000;
+            const endMs = schedule[currentIndex + 1].minutes * 60 * 1000;
+            const nowMs = (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) * 1000 + now.getMilliseconds();
+            const remainingMs = Math.max(0, endMs - nowMs);
+            const durationMs = Math.max(1, endMs - startMs);
+            const currentMemo = schedule[currentIndex].memo || '（項目名なし）';
+            const nextMemo = schedule[currentIndex + 1].memo || '（項目名なし）';
+
+            els.currentItem.textContent = currentMemo;
+            els.currentItemTime.textContent = schedule[currentIndex].value;
+            els.nextItem.textContent = nextMemo;
+            els.nextItemTime.textContent = schedule[currentIndex + 1].value;
+            els.statusMessage.textContent = '';
+            els.countdownCaption.textContent = `次の「${nextMemo}」まで`;
+            els.progressBar.style.width = `${Math.max(0, Math.min(100, remainingMs / durationMs * 100))}%`;
             els.countdown.textContent = `${String(Math.floor(remainingMs / 60000)).padStart(2, '0')}:${String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, '0')}`;
-
-            if (lastNotifiedIndex !== null && lastNotifiedIndex !== currentIndex) {
-                sendNotification("次の予定です", `${nextText} が始まりました。`);
-            }
-            lastNotifiedIndex = currentIndex;
-
-        } else if (nowTime < schedule[0].time.getTime()) {
-            els.status.textContent = "開始時刻を待っています...";
+            schedule[currentIndex].element.classList.add('bt-current-row');
+            schedule[currentIndex + 1].element.classList.add('bt-next-row');
+        } else if (currentMinuteWithSeconds < schedule[0].minutes) {
+            const first = schedule[0];
+            const firstMs = first.minutes * 60 * 1000;
+            const nowMs = (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) * 1000 + now.getMilliseconds();
+            const remainingMs = Math.max(0, firstMs - nowMs);
+            els.currentItem.textContent = '開始前';
+            els.currentItemTime.textContent = '--:--';
+            els.nextItem.textContent = first.memo || '（項目名なし）';
+            els.nextItemTime.textContent = first.value;
+            els.statusMessage.textContent = '開始時刻を待っています...';
             els.progressBar.style.width = '100%';
-            els.countdown.textContent = "--:--";
-            schedule[0].element.classList.add('bt-active-row');
+            els.countdown.textContent = `${String(Math.floor(remainingMs / 60000)).padStart(2, '0')}:${String(Math.floor((remainingMs % 60000) / 1000)).padStart(2, '0')}`;
+            els.countdownCaption.textContent = '開始まで';
+            first.element.classList.add('bt-next-row');
         } else {
-            els.status.textContent = "すべての予定が終了しました";
+            els.currentItem.textContent = schedule[schedule.length - 1].memo || '終了';
+            els.currentItemTime.textContent = schedule[schedule.length - 1].value;
+            els.nextItem.textContent = '--';
+            els.nextItemTime.textContent = '--:--';
+            els.statusMessage.textContent = 'すべての予定が終了しました';
             els.progressBar.style.width = '0%';
-            els.countdown.textContent = "00:00";
-            
-            if (lastNotifiedIndex !== 'finished') {
-                sendNotification("終了しました", "すべての予定スケジュールが完了しました。");
-                lastNotifiedIndex = 'finished';
-            }
-            if (isRunning) setTimerState(false);
+            els.countdown.textContent = '00:00';
+            els.countdownCaption.textContent = '終了';
+            schedule[schedule.length - 1].element.classList.add('bt-current-row');
+            setTimerState(false);
         }
     }
 
+    restoreNumericSettings();
     loadData();
-    setInterval(updateTime, 1000);
+    renderIdle();
+    setInterval(updateTime, 250);
+    if (safeStorageGet('barTimerIsRunning') === 'true') setTimerState(true);
 })();
+
 </script>
 </body>
 </html>
