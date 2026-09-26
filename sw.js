@@ -1,5 +1,5 @@
 // バージョン管理。ファイルを更新した際は必ずここを書き換えてください。
-const CACHE_NAME = 'stage-time-toolkit-v14';
+const CACHE_NAME = 'stage-time-toolkit-v15';
 
 // キャッシュするアセットのリスト。index.html内での呼び出しパスと完全に一致させています。
 const urlsToCache = [
