@@ -162,8 +162,15 @@
     .bt-btn-clear { background: #7f8c8d; color: white; flex: 1; margin: 0; }
     .bt-btn-undo { background: #f39c12; color: white; flex: 0.8; }
     
-    /* ファイル保存/読込ボタン用スタイル */
+    /* テキスト入出力 */
     .bt-btn-file { background: #2c3e50; color: white; flex: 1; }
+    .bt-text-tools { margin-top: 15px; padding-top: 15px; border-top: 1px solid #444; display: flex; flex-direction: column; gap: 10px; }
+    .bt-text-help { color: #999; font-size: 0.85rem; line-height: 1.5; }
+    .bt-textarea { width: 100%; min-height: 150px; resize: vertical; padding: 12px; border-radius: 6px; border: 1px solid #555; background: #181818; color: white; font: 15px/1.55 monospace; }
+    .bt-text-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+    .bt-text-buttons button { flex: 1; min-width: 120px; }
+    .bt-btn-apply-text { background: #2980b9; color: white; }
+    .bt-btn-copy-text { background: #566573; color: white; }
     
     .bt-start-btn { background: #27ae60; width: 100%; font-size: 1.5rem; padding: 15px; color: white; margin-bottom: 15px;}
     
@@ -300,12 +307,20 @@
                 <button class="bt-btn-clear" id="bt-btn-clear-all" style="margin-top: 5px;">全消去</button>
             </div>
 
-            <div class="bt-file-controls" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #444; display: flex; flex-direction: column; gap: 10px;">
-                <input type="text" id="bt-filename-input" placeholder="保存するファイル名 (省略で自動日時)" style="padding: 12px; border-radius: 5px; border: 1px solid #555; font-size: 16px; background: #222; color: white; width: 100%;">
-                <div style="display: flex; gap: 10px;">
-                    <button class="bt-btn-file" id="bt-btn-file-export" title="現在の設定をファイルとして端末に保存します">設定を保存</button>
-                    <button class="bt-btn-file" id="bt-btn-file-import" title="保存した設定ファイルを読み込みます">設定を読込</button>
-                    <input type="file" id="bt-file-input" accept=".json" style="display: none;">
+            <div class="bt-text-tools">
+                <div class="bt-text-help">
+                    テキスト形式：<code>1300受付開始</code>（1行1予定）<br><span style="color:#888;">※旧形式の 13:00受付開始 も読み込めます</span>
+                </div>
+                <textarea id="bt-text-editor" class="bt-textarea" spellcheck="false" placeholder="1300受付開始&#10;1330開場&#10;1400開演"></textarea>
+                <div class="bt-text-buttons">
+                    <button type="button" class="bt-btn-apply-text" id="bt-btn-text-apply">貼り付け内容を反映</button>
+                    <button type="button" class="bt-btn-copy-text" id="bt-btn-text-copy">現在の設定をコピー</button>
+                </div>
+                <input type="text" id="bt-filename-input" placeholder="保存するファイル名（省略で自動日時）" style="padding: 12px; border-radius: 5px; border: 1px solid #555; font-size: 16px; background: #222; color: white; width: 100%;">
+                <div class="bt-text-buttons">
+                    <button type="button" class="bt-btn-file" id="bt-btn-file-export" title="現在の設定をテキストファイルとして保存します">TXT書き出し</button>
+                    <button type="button" class="bt-btn-file" id="bt-btn-file-import" title="テキストファイルから設定を読み込みます">TXT読み込み</button>
+                    <input type="file" id="bt-file-input" accept=".txt,text/plain" style="display: none;">
                 </div>
             </div>
 
@@ -641,7 +656,10 @@ tabBtns.forEach(btn => {
         btnFileExport: document.getElementById('bt-btn-file-export'),
         btnFileImport: document.getElementById('bt-btn-file-import'),
         fileInput: document.getElementById('bt-file-input'),
-        filenameInput: document.getElementById('bt-filename-input')
+        filenameInput: document.getElementById('bt-filename-input'),
+        textEditor: document.getElementById('bt-text-editor'),
+        btnTextApply: document.getElementById('bt-btn-text-apply'),
+        btnTextCopy: document.getElementById('bt-btn-text-copy')
     };
 
     let isRunning = false;
@@ -940,14 +958,98 @@ tabBtns.forEach(btn => {
         }
     }
 
-    els.btnFileExport.addEventListener('click', () => {
-        const data = getScheduleData().filter(item => item.time !== '');
-        const normalized = normalizeScheduleData(data, { allowEmpty: false });
-        if (!normalized || normalized.length === 0) return alert('保存する時刻がありません。');
-        const validation = validateScheduleRows(false);
-        if (!validation.ok) return alert(validation.message);
+    function scheduleToPlainText(data = getScheduleData()) {
+        return data
+            .filter(item => item.time.trim() !== '')
+            .map(item => `${item.time.trim().replace(':', '')}${item.memo || ''}`)
+            .join('\n');
+    }
 
-        const url = URL.createObjectURL(new Blob([JSON.stringify(normalized, null, 2)], { type: 'application/json' }));
+    function parsePlainTextSchedule(text) {
+        const source = String(text || '').replace(/^\uFEFF/, '');
+        const lines = source.split(/\r?\n/);
+        const result = [];
+        let previous = -1;
+
+        for (let i = 0; i < lines.length; i++) {
+            const rawLine = lines[i];
+            if (!rawLine.trim()) continue;
+            if (result.length >= 500) {
+                return { ok: false, message: '予定は500件まで読み込めます。' };
+            }
+
+            const match = rawLine.match(/^\s*([01]\d|2[0-3]):?([0-5]\d)(.*)$/);
+            if (!match) {
+                return { ok: false, message: `${i + 1}行目の形式が正しくありません。例：1300受付開始` };
+            }
+
+            const time = `${match[1]}:${match[2]}`;
+            const minutes = Number(match[1]) * 60 + Number(match[2]);
+            const memo = match[3].replace(/^[ \t　]+/, '');
+            if (memo.length > 5000) {
+                return { ok: false, message: `${i + 1}行目の項目名が長すぎます。` };
+            }
+            if (minutes <= previous) {
+                return { ok: false, message: `${i + 1}行目の時刻が前の行以前になっています。同一日内で昇順にしてください。` };
+            }
+            previous = minutes;
+            result.push({ time, memo });
+        }
+
+        if (result.length === 0) return { ok: false, message: '読み込める予定がありません。' };
+        return { ok: true, data: result };
+    }
+
+    function applyPlainText(text, { showSuccess = false } = {}) {
+        const parsed = parsePlainTextSchedule(text);
+        if (!parsed.ok) {
+            alert(parsed.message);
+            return false;
+        }
+        saveUndoState();
+        restoreRows(parsed.data);
+        els.textEditor.value = scheduleToPlainText(parsed.data);
+        if (isRunning) setTimerState(false);
+        renderIdle();
+        if (showSuccess) alert('スケジュールを読み込みました。');
+        return true;
+    }
+
+    async function copyTextToClipboard(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return;
+        }
+        els.textEditor.value = text;
+        els.textEditor.focus();
+        els.textEditor.select();
+        if (!document.execCommand('copy')) throw new Error('copy failed');
+    }
+
+    els.btnTextApply.addEventListener('click', () => {
+        applyPlainText(els.textEditor.value);
+    });
+
+    els.btnTextCopy.addEventListener('click', async () => {
+        const text = scheduleToPlainText();
+        const parsed = parsePlainTextSchedule(text);
+        if (!parsed.ok) return alert(parsed.message);
+        els.textEditor.value = text;
+        try {
+            await copyTextToClipboard(text);
+            const original = els.btnTextCopy.textContent;
+            els.btnTextCopy.textContent = 'コピーしました';
+            setTimeout(() => { els.btnTextCopy.textContent = original; }, 1200);
+        } catch (err) {
+            alert('自動コピーできませんでした。テキスト欄を選択してコピーしてください。');
+        }
+    });
+
+    els.btnFileExport.addEventListener('click', () => {
+        const text = scheduleToPlainText();
+        const parsed = parsePlainTextSchedule(text);
+        if (!parsed.ok) return alert(parsed.message);
+        const url = URL.createObjectURL(new Blob(['\uFEFF', text], { type: 'text/plain;charset=utf-8' }));
         const a = document.createElement('a');
         a.href = url;
         let filename = els.filenameInput.value.trim().replace(/[\\/:*?"<>|]/g, '_');
@@ -956,7 +1058,7 @@ tabBtns.forEach(btn => {
             const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
             filename = `stage_schedule_${dateStr}`;
         }
-        if (!filename.toLowerCase().endsWith('.json')) filename += '.json';
+        if (!filename.toLowerCase().endsWith('.txt')) filename += '.txt';
         a.download = filename;
         document.body.appendChild(a);
         a.click();
@@ -969,25 +1071,19 @@ tabBtns.forEach(btn => {
         const file = e.target.files && e.target.files[0];
         if (!file) return;
         if (file.size > 2 * 1024 * 1024) {
-            alert('ファイルが大きすぎます。2MB以下のJSONを使用してください。');
+            alert('ファイルが大きすぎます。2MB以下のテキストファイルを使用してください。');
             e.target.value = '';
             return;
         }
         const reader = new FileReader();
         reader.onload = event => {
-            try {
-                const parsed = normalizeScheduleData(JSON.parse(String(event.target.result || '')));
-                if (!parsed) throw new Error('invalid file');
-                saveUndoState();
-                restoreRows(parsed);
-                els.filenameInput.value = file.name.replace(/\.json$/i, '');
-                alert('スケジュールの読み込みが完了しました。');
-            } catch (err) {
-                alert('ファイル形式が正しくありません。時刻は HH:MM 形式で保存してください。');
+            const text = String(event.target.result || '');
+            if (applyPlainText(text, { showSuccess: true })) {
+                els.filenameInput.value = file.name.replace(/\.txt$/i, '');
             }
         };
-        reader.onerror = () => alert('ファイルの読み込みに失敗しました。');
-        reader.readAsText(file);
+        reader.onerror = () => alert('テキストファイルの読み込みに失敗しました。');
+        reader.readAsText(file, 'UTF-8');
         e.target.value = '';
     });
 
@@ -1229,6 +1325,7 @@ tabBtns.forEach(btn => {
 
     restoreNumericSettings();
     loadData();
+    els.textEditor.value = scheduleToPlainText();
     renderIdle();
     setInterval(updateTime, 250);
     if (safeStorageGet('barTimerIsRunning') === 'true') setTimerState(true);
