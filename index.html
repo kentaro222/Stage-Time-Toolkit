@@ -833,7 +833,6 @@ tabBtns.forEach(btn => {
         if (Number.isInteger(currentIndex) && rows[currentIndex]) rows[currentIndex].classList.add('current');
         if (Number.isInteger(nextIndex) && rows[nextIndex]) {
             rows[nextIndex].classList.add('next');
-            rows[nextIndex].scrollIntoView({ block: 'nearest' });
         }
     }
 
