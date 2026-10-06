@@ -240,8 +240,8 @@
                 <h3 style="margin:0;">記録テキスト</h3>
                 <span class="sw-record-note">自動保存</span>
             </div>
-            <textarea id="sw-record-text" class="sw-record-textarea" spellcheck="false" placeholder="00:12:34  20:15:10  メモ"></textarea>
-            <div class="sw-record-help">ラップ記録を押すと「経過時間  現在時刻」を追記します。メモは必要なときにテキスト欄へ直接入力できます。</div>
+            <textarea id="sw-record-text" class="sw-record-textarea" spellcheck="false" placeholder="00:00:00  11:30:00  開始\n00:12:34  11:42:34  メモ\n00:15:00  11:45:00  停止"></textarea>
+            <div class="sw-record-help">開始・停止・ラップ記録を押すと「経過時間  現在時刻  種別」を追記します。メモは必要なときにテキスト欄へ直接入力できます。</div>
             <input type="text" id="sw-filename-input" class="sw-filename-input" placeholder="ファイル名（例：本番記録）" maxlength="120" aria-label="保存するテキストファイル名">
             <div class="sw-record-actions">
                 <button type="button" class="sw-btn-copy" id="sw-btn-copy">コピー</button>
@@ -564,8 +564,30 @@ tabBtns.forEach(btn => {
         if (document.visibilityState === 'visible' && state.isRunning) requestWakeLock(false);
     });
 
+    function syncRecordText() {
+        state.recordText = els.recordText.value;
+        saveState();
+    }
+
+    function appendRecordLine(label, elapsedMs, date = new Date(), trailingMemoSpace = false) {
+        // 記録追加でページやテキスト欄のスクロール位置を動かさない。
+        const pageX = window.scrollX;
+        const pageY = window.scrollY;
+        const textScrollTop = els.recordText.scrollTop;
+        const textScrollLeft = els.recordText.scrollLeft;
+        const line = `${formatTime(elapsedMs)}  ${formatRealTime(date)}${label ? `  ${label}` : ''}${trailingMemoSpace ? '  ' : ''}`;
+        const existing = els.recordText.value;
+        const separator = existing.length === 0 || existing.endsWith('\n') ? '' : '\n';
+        els.recordText.value = `${existing}${separator}${line}`;
+        els.recordText.scrollTop = textScrollTop;
+        els.recordText.scrollLeft = textScrollLeft;
+        window.scrollTo(pageX, pageY);
+        syncRecordText();
+    }
+
     els.btnStart.addEventListener('click', () => {
         const now = Date.now();
+        const nowDate = new Date(now);
         if (state.isRunning) {
             state.accumulatedTime += now - state.startTime;
             state.isRunning = false;
@@ -573,6 +595,7 @@ tabBtns.forEach(btn => {
             els.btnStart.classList.add('primary');
             cancelAnimationFrame(animationFrameId);
             releaseWakeLock();
+            appendRecordLine('停止', state.accumulatedTime, nowDate);
         } else {
             if (!state.baseShowTime && state.accumulatedTime === 0) {
                 state.baseShowTime = now;
@@ -584,27 +607,20 @@ tabBtns.forEach(btn => {
             els.btnStart.classList.remove('primary');
             requestWakeLock(false);
             updateTime();
+            appendRecordLine('開始', state.accumulatedTime, nowDate);
         }
         saveState();
     });
-
-    function syncRecordText() {
-        state.recordText = els.recordText.value;
-        saveState();
-    }
 
     els.recordText.addEventListener('input', syncRecordText);
     els.filenameInput.addEventListener('input', () => safeStorageSet('swRecordFilename', els.filenameInput.value));
 
     els.btnLap.addEventListener('click', () => {
+        const now = Date.now();
         const elapsedMs = state.isRunning
-            ? state.accumulatedTime + (Date.now() - state.startTime)
+            ? state.accumulatedTime + (now - state.startTime)
             : state.accumulatedTime;
-        const line = `${formatTime(elapsedMs)}  ${formatRealTime(new Date())}`;
-        const existing = els.recordText.value;
-        const separator = existing.length === 0 || existing.endsWith('\n') ? '' : '\n';
-        els.recordText.value = `${existing}${separator}${line}  `;
-        syncRecordText();
+        appendRecordLine('', elapsedMs, new Date(now), true);
     });
 
     els.btnReset.addEventListener('click', () => {
