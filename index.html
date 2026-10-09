@@ -95,11 +95,14 @@
     #sw-time-display { font-size: 4.5rem; font-family: monospace; font-weight: bold; color: var(--sw-accent); margin: 10px 0 20px 0; letter-spacing: 3px; }
     #sw-status-bar { width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px; }
     
-    .sw-controls { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; justify-content: center; }
-    .sw-controls button { background-color: var(--panel-bg); color: var(--text-color); border: 1px solid var(--border-color); padding: 15px 30px; font-size: 1.2rem; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
+    /* 計測操作とリセット系操作を2段に分け、押し間違いを防ぐ */
+    .sw-controls { display: flex; flex-direction: column; width: 100%; max-width: 500px; gap: 24px; margin-bottom: 20px; }
+    .sw-control-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; width: 100%; }
+    .sw-controls button { width: 100%; background-color: var(--panel-bg); color: var(--text-color); border: 1px solid var(--border-color); padding: 15px 8px; font-size: 1.1rem; border-radius: 8px; cursor: pointer; transition: all 0.2s; }
     .sw-controls button:active { transform: scale(0.95); }
     .sw-controls button.primary { background-color: var(--sw-accent); color: #000; font-weight: bold; }
     .sw-controls button.danger { border-color: var(--sw-danger); color: var(--sw-danger); }
+    .sw-controls button.sw-btn-clear { background-color: #7f2d2d; border-color: #7f2d2d; color: #fff; }
 
     .sw-base-time-container { display: flex; align-items: center; gap: 8px; background-color: var(--panel-bg); padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border-color); }
     #sw-base-time-input { background-color: transparent; color: var(--sw-accent); border: none; font-family: monospace; font-size: 1.1rem; outline: none; }
@@ -117,6 +120,7 @@
     .sw-record-actions button { flex: 1; min-width: 120px; padding: 11px 13px; cursor: pointer; border: none; border-radius: 6px; font-weight: bold; font-size: 14px; }
     .sw-btn-copy { background: #566573; color: white; }
     .sw-btn-file { background: #2c3e50; color: white; }
+    .sw-btn-clear { background: #7f2d2d; color: white; }
 
 
     /* =========================================
@@ -230,9 +234,14 @@
         <div id="sw-time-display">00:00:00</div>
 
         <div class="sw-controls">
-            <button id="sw-btn-start" class="primary">開始</button>
-            <button id="sw-btn-lap">ラップ記録</button>
-            <button id="sw-btn-reset" class="danger">リセット</button>
+            <div class="sw-control-row">
+                <button id="sw-btn-start" class="primary">開始</button>
+                <button id="sw-btn-lap">ラップ記録</button>
+            </div>
+            <div class="sw-control-row">
+                <button type="button" class="sw-btn-clear" id="sw-btn-clear-record" title="記録テキストだけを消去します。タイマーとファイル名はそのままです">記録消去</button>
+                <button id="sw-btn-reset" class="danger" title="経過時間を0に戻します。記録テキストは残ります">ゼロリセット</button>
+            </div>
         </div>
 
         <div class="sw-record-container">
@@ -241,7 +250,7 @@
                 <span class="sw-record-note">自動保存</span>
             </div>
             <textarea id="sw-record-text" class="sw-record-textarea" spellcheck="false" placeholder="00:00:00  11:30:00  開始\n00:12:34  11:42:34  メモ\n00:15:00  11:45:00  停止"></textarea>
-            <div class="sw-record-help">開始・停止・ラップ記録を押すと「経過時間  現在時刻  種別」を追記します。メモは必要なときにテキスト欄へ直接入力できます。</div>
+            <div class="sw-record-help">開始・停止・ラップ記録・ゼロリセットを押すと「経過時間  現在時刻  種別」を追記します。ゼロリセットは記録を消さず、停止中は0で停止、計測中はその瞬間から0秒で計測を続けます。メモは必要なときにテキスト欄へ直接入力できます。</div>
             <input type="text" id="sw-filename-input" class="sw-filename-input" placeholder="ファイル名（例：本番記録）" maxlength="120" aria-label="保存するテキストファイル名">
             <div class="sw-record-actions">
                 <button type="button" class="sw-btn-copy" id="sw-btn-copy">コピー</button>
@@ -408,6 +417,7 @@ tabBtns.forEach(btn => {
         btnLap: document.getElementById('sw-btn-lap'),
         btnReset: document.getElementById('sw-btn-reset'),
         btnExport: document.getElementById('sw-btn-export'),
+        btnClearRecord: document.getElementById('sw-btn-clear-record'),
         currentTime: document.getElementById('sw-currentTime')
     };
 
@@ -624,16 +634,29 @@ tabBtns.forEach(btn => {
     });
 
     els.btnReset.addEventListener('click', () => {
-        if (!confirm('タイマーと記録テキストをすべてリセットしますか？')) return;
-        state = emptyState();
+        const now = Date.now();
+        const elapsedMs = state.isRunning
+            ? state.accumulatedTime + (now - state.startTime)
+            : state.accumulatedTime;
+
+        // ゼロリセットをかけた地点の経過時間を、記録テキストへ残す。
+        appendRecordLine('ゼロリセット', elapsedMs, new Date(now));
+
+        // 計測状態は変えず、経過時間だけを0へ戻す。
+        state.accumulatedTime = 0;
+        if (state.isRunning) {
+            // 計測中はこの瞬間を新しい起点として、そのまま0秒から続行する。
+            state.startTime = now;
+            state.baseShowTime = now;
+        } else {
+            // 停止中は0秒で停止した状態にする。次回開始時に起点時刻を設定する。
+            state.startTime = 0;
+            state.baseShowTime = null;
+            renderTime(0);
+        }
+
         updateBaseTimeDisplay();
-        els.btnStart.textContent = '開始';
-        els.btnStart.classList.add('primary');
-        cancelAnimationFrame(animationFrameId);
-        renderTime(0);
-        els.recordText.value = '';
         saveState();
-        releaseWakeLock();
     });
 
     async function copyRecordText() {
@@ -655,6 +678,14 @@ tabBtns.forEach(btn => {
     }
 
     els.btnCopy.addEventListener('click', copyRecordText);
+
+    els.btnClearRecord.addEventListener('click', () => {
+        if (!els.recordText.value) return;
+        if (!confirm('記録テキストをすべて消去しますか？\nタイマーの経過時間とファイル名はそのまま残ります。')) return;
+        els.recordText.value = '';
+        state.recordText = '';
+        saveState();
+    });
 
     function sanitizedFilename() {
         let name = els.filenameInput.value.trim().replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').replace(/[. ]+$/g, '');
