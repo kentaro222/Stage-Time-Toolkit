@@ -249,8 +249,8 @@
                 <h3 style="margin:0;">記録テキスト</h3>
                 <span class="sw-record-note">自動保存</span>
             </div>
-            <textarea id="sw-record-text" class="sw-record-textarea" spellcheck="false" placeholder="00:00:00  11:30:00  開始\n00:12:34  11:42:34  メモ\n00:15:00  11:45:00  停止"></textarea>
-            <div class="sw-record-help">開始・停止・ラップ記録・ゼロリセットを押すと「経過時間  現在時刻  種別」を追記します。ゼロリセットは記録を消さず、停止中は0で停止、計測中はその瞬間から0秒で計測を続けます。メモは必要なときにテキスト欄へ直接入力できます。</div>
+            <textarea id="sw-record-text" class="sw-record-textarea" spellcheck="false"></textarea>
+            <div class="sw-record-help">開始・停止・ラップ記録は「経過時間  現在時刻  種別」を追記します。ゼロリセットは計測中のみ直前の経過時間を記録し、即座に0秒から計測を続けます。停止中は記録せず0秒に戻します。メモは必要なときにテキスト欄へ直接入力できます。</div>
             <input type="text" id="sw-filename-input" class="sw-filename-input" placeholder="ファイル名（例：本番記録）" maxlength="120" aria-label="保存するテキストファイル名">
             <div class="sw-record-actions">
                 <button type="button" class="sw-btn-copy" id="sw-btn-copy">コピー</button>
@@ -307,10 +307,10 @@
                     <span class="bt-section-note">テキストのみ</span>
                 </div>
                 <div class="bt-text-help">
-                    1行1予定：<code>1230開場</code> / <code>1330開演</code><br>
-                    同一日内で時刻順に入力してください。<code>12:30開場</code> も読み込めます。
+                    1行1予定：<code>1230開場</code> / <code>1300開演</code><br>
+                    同一日内で時刻順に入力してください。<code>13:00開演</code> も読み込めます。
                 </div>
-                <textarea id="bt-text-editor" class="bt-textarea" spellcheck="false" placeholder="1230開場&#10;1330開演&#10;1415休憩"></textarea>
+                <textarea id="bt-text-editor" class="bt-textarea" spellcheck="false" placeholder="1230開場&#10;1300開演&#10;1400休憩"></textarea>
                 <div id="bt-editor-state" class="bt-editor-state">反映済み</div>
                 <div class="bt-button-row">
                     <button type="button" class="bt-btn-apply" id="bt-btn-text-apply">編集内容を反映</button>
@@ -639,8 +639,10 @@ tabBtns.forEach(btn => {
             ? state.accumulatedTime + (now - state.startTime)
             : state.accumulatedTime;
 
-        // ゼロリセットをかけた地点の経過時間を、記録テキストへ残す。
-        appendRecordLine('ゼロリセット', elapsedMs, new Date(now));
+        // 計測中のみ、リセット直前の経過時間を記録する。
+        if (state.isRunning) {
+            appendRecordLine('ゼロリセット', elapsedMs, new Date(now));
+        }
 
         // 計測状態は変えず、経過時間だけを0へ戻す。
         state.accumulatedTime = 0;
@@ -810,7 +812,7 @@ tabBtns.forEach(btn => {
             if (result.length >= 500) return { ok: false, message: '予定は500件までです。' };
 
             const match = rawLine.match(/^\s*([01]\d|2[0-3]):?([0-5]\d)(.*)$/);
-            if (!match) return { ok: false, message: `${i + 1}行目の形式が正しくありません。例：1230開場` };
+            if (!match) return { ok: false, message: `${i + 1}行目の形式が正しくありません。例：1300開演` };
 
             const minutes = Number(match[1]) * 60 + Number(match[2]);
             if (minutes <= previous) {
