@@ -103,6 +103,7 @@
     .sw-controls button.primary { background-color: var(--sw-accent); color: #000; font-weight: bold; }
     .sw-controls button.danger { border-color: var(--sw-danger); color: var(--sw-danger); }
     .sw-controls button.sw-btn-clear { background-color: #7f2d2d; border-color: #7f2d2d; color: #fff; }
+    .sw-controls button.sw-btn-clear:disabled { background-color: #393939; border-color: #444; color: #777; cursor: not-allowed; opacity: 0.6; }
 
     .sw-base-time-container { display: flex; align-items: center; gap: 8px; background-color: var(--panel-bg); padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border-color); }
     #sw-base-time-input { background-color: transparent; color: var(--sw-accent); border: none; font-family: monospace; font-size: 1.1rem; outline: none; }
@@ -239,7 +240,7 @@
                 <button id="sw-btn-lap">ラップ記録</button>
             </div>
             <div class="sw-control-row">
-                <button type="button" class="sw-btn-clear" id="sw-btn-clear-record" title="記録テキストだけを消去します。タイマーとファイル名はそのままです">記録消去</button>
+                <button type="button" class="sw-btn-clear" id="sw-btn-clear-record" title="記録と計測時間を消去します。ファイル名は保持します">記録消去</button>
                 <button id="sw-btn-reset" class="danger" title="経過時間を0に戻します。記録テキストは残ります">ゼロリセット</button>
             </div>
         </div>
@@ -478,6 +479,7 @@ tabBtns.forEach(btn => {
         els.recordText.value = state.recordText;
         els.filenameInput.value = safeStorageGet('swRecordFilename') || '';
         updateBaseTimeDisplay();
+        updateClearRecordAvailability();
 
         if (state.isRunning) {
             els.btnStart.textContent = '停止';
@@ -489,6 +491,13 @@ tabBtns.forEach(btn => {
         }
         updateRealTime();
         setInterval(updateRealTime, 1000);
+    }
+
+    function updateClearRecordAvailability() {
+        els.btnClearRecord.disabled = state.isRunning;
+        els.btnClearRecord.title = state.isRunning
+            ? '記録消去は計測停止中のみ使用できます'
+            : '記録と計測時間を消去します。ファイル名は保持します';
     }
 
     function saveState() {
@@ -619,6 +628,7 @@ tabBtns.forEach(btn => {
             updateTime();
             appendRecordLine('開始', state.accumulatedTime, nowDate);
         }
+        updateClearRecordAvailability();
         saveState();
     });
 
@@ -682,10 +692,13 @@ tabBtns.forEach(btn => {
     els.btnCopy.addEventListener('click', copyRecordText);
 
     els.btnClearRecord.addEventListener('click', () => {
-        if (!els.recordText.value) return;
-        if (!confirm('記録テキストをすべて消去しますか？\nタイマーの経過時間とファイル名はそのまま残ります。')) return;
+        if (state.isRunning) return;
+        if (!confirm('記録と計測時間をすべて消去しますか？\nファイル名はそのまま残ります。')) return;
+        state = emptyState();
         els.recordText.value = '';
-        state.recordText = '';
+        renderTime(0);
+        updateBaseTimeDisplay();
+        updateClearRecordAvailability();
         saveState();
     });
 
